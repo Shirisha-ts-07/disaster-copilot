@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🌍 Disaster Copilot Dashboard
 
 A real-time disaster management system that analyzes weather and earthquake data to predict risks and provide emergency response.
@@ -37,7 +36,3 @@ Clone the repository:
 ```bash
 git clone https://github.com/YOUR_USERNAME/disaster-copilot.git
 cd disaster-copilot
-=======
-# disaster-copilot
-Real-time disaster management dashboard that analyzes weather and earthquake data to predict flood risk and provide emergency response including safe routes, nearby hospitals, and resource availability.
->>>>>>> 78b9ce513a63dc3e5b1c57d27bd61403f508acdc
