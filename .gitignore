@@ -1,3 +1,5 @@
 dis_env/
 __pycache__/
-*.log
+*.log*.mp3
+temp.png
+__pycache__/
