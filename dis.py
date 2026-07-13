@@ -1,175 +1,1059 @@
+# import streamlit as st
+# import requests
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# import datetime
+# from reportlab.platypus import Spacer, Image, Table, TableStyle
+# from reportlab.lib import colors
+# from reportlab.lib.styles import getSampleStyleSheet
+# from gtts import gTTS
+# import os
+# import logging
+# from streamlit_mic_recorder import mic_recorder
+# import speech_recognition as sr
+# import tempfile
+# import wave
+# import io
+# import pydeck as pdk
+# import json
+# import urllib.request
+# from crewai import Agent, Task, Crew
+# from reportlab.platypus import SimpleDocTemplate, Paragraph
+# from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+# from reportlab.lib.styles import getSampleStyleSheet
+# from reportlab.lib import colors
+# import random
+# import heapq
+
+# def dijkstra(graph, start, end):
+#     queue = [(0, start)]
+#     distances = {node: float('inf') for node in graph}
+#     distances[start] = 0
+#     previous = {}
+
+#     while queue:
+#         cost, node = heapq.heappop(queue)
+
+#         if node == end:
+#             break
+
+#         for neighbor, weight in graph[node]:
+#             new_cost = cost + weight
+
+#             if new_cost < distances[neighbor]:
+#                 distances[neighbor] = new_cost
+#                 previous[neighbor] = node
+#                 heapq.heappush(queue, (new_cost, neighbor))
+
+#     # Reconstruct path
+#     path = []
+#     current = end
+#     while current in previous:
+#         path.insert(0, current)
+#         current = previous[current]
+
+#     path.insert(0, start)
+#     return path
+
+
+
+# def generate_resources(risk_level):
+#     if risk_level == "HIGH":
+#         beds = random.randint(0, 20)
+#         ambulances = random.randint(0, 3)
+#     elif risk_level == "MEDIUM":
+#         beds = random.randint(10, 40)
+#         ambulances = random.randint(2, 6)
+#     else:
+#         beds = random.randint(30, 80)
+#         ambulances = random.randint(5, 10)
+
+#     return beds, ambulances
+# def load_world_map():
+#     url = "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
+#     with urllib.request.urlopen(url) as response:
+#         return json.load(response)
+
+
+# def generate_country_risk():
+#     return {
+#         "Indonesia": "HIGH",
+#         "India": "MEDIUM",
+#         "United States of America": "LOW"
+#     }
+
+
+# def get_color(risk):
+#     if risk == "HIGH":
+#         return [255, 0, 0, 120]
+#     elif risk == "MEDIUM":
+#         return [255, 255, 0, 120]
+#     else:
+#         return [0, 255, 0, 120]
+
+
+
+# def create_pdf(report_text, rain_data=None, temp_data=None, hospitals=None):
+#     doc = SimpleDocTemplate("report.pdf")
+#     styles = getSampleStyleSheet()
+
+#     content = []
+
+#     # ---------- TITLE ----------
+#     content.append(Paragraph("<b>DISASTER ANALYSIS REPORT</b>", styles["Title"]))
+#     content.append(Spacer(1, 15))
+
+#     # ---------- REPORT TEXT ----------
+#     content.append(Paragraph(report_text, styles["Normal"]))
+#     content.append(Spacer(1, 15))
+
+#     # ---------- RAIN GRAPH ----------
+#     if rain_data is not None and len(rain_data) > 0:
+#         plt.figure()
+#         plt.plot(rain_data)
+#         plt.title("Rainfall Forecast")
+#         plt.xlabel("Hours")
+#         plt.ylabel("mm")
+#         plt.grid()
+#         plt.savefig("rain.png")
+#         plt.close()
+
+#         content.append(Paragraph("<b>Rainfall Analysis</b>", styles["Heading2"]))
+#         content.append(Spacer(1, 10))
+#         content.append(Image("rain.png", width=400, height=200))
+
+#     # ---------- TEMP GRAPH ----------
+#     if temp_data is not None and len(temp_data) > 0:
+#         plt.figure()
+#         plt.plot(temp_data)
+#         plt.title("Temperature Forecast")
+#         plt.xlabel("Hours")
+#         plt.ylabel("°C")
+#         plt.grid()
+#         plt.savefig("temp.png")
+#         plt.close()
+
+#         content.append(Spacer(1, 15))
+#         content.append(Paragraph("<b>Temperature Analysis</b>", styles["Heading2"]))
+#         content.append(Spacer(1, 10))
+#         content.append(Image("temp.png", width=400, height=200))
+
+#     # ---------- HOSPITAL TABLE ----------
+#     if hospitals:
+#         content.append(Spacer(1, 20))
+#         content.append(Paragraph("<b>Nearby Medical Resources</b>", styles["Heading2"]))
+#         content.append(Spacer(1, 10))
+
+#         table_data = [["Hospital", "Beds", "Ambulances"]]
+
+#         for h in hospitals[:5]:
+#             name = h.get("tags", {}).get("name", "Hospital")
+#             beds = "Varies"
+#             ambulances = "Available"
+
+#             table_data.append([name, beds, ambulances])
+
+#         table = Table(table_data)
+
+#         table.setStyle(TableStyle([
+#             ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+#             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+#             ("GRID", (0, 0), (-1, -1), 1, colors.black),
+#             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+#         ]))
+
+#         content.append(table)
+
+#     doc.build(content)
+
+#     with open("report.pdf", "rb") as f:
+#         return f.read()
+
+
+# def setup_logger():
+#     logging.basicConfig(
+#         level=logging.DEBUG,
+#         format="%(asctime)s %(levelname)s %(message)s",
+#         filename="disaster_copilot.log",
+#         filemode="a",
+#     )
+
+
+# def log_info(msg):
+#     st.write(f"ℹ️ {msg}")
+#     logging.info(msg)
+
+
+# def log_error(msg, exc=None):
+#     st.error(f"❌ {msg}")
+#     if exc:
+#         logging.exception(msg)
+#     else:
+#         logging.error(msg)
+
+
+# setup_logger()
+
+
+
+# st.set_page_config(page_title="Disaster Copilot", layout="wide")
+
+
+# st.title("🌍 Disaster Copilot Dashboard")
+# st.markdown("Real-time disaster risk analysis using weather intelligence")
+# now = datetime.datetime.now()
+
+# current_date = now.strftime("%d %B %Y")
+# current_time = now.strftime("%I:%M %p")
+# st.markdown(f"📅 Date: {current_date} | ⏰ Time: {current_time}")
+# st.subheader("🌍 Live Disaster Risk Map")
+
+# st.info("💡 View high-risk zones (red) and enter a location below to analyze")
+
+
+
+
+# # ---------------- MAP SECTION ----------------
+
+
+# # ---------------- ZONE FUNCTION ----------------
+# def get_global_climatic_zone(lat, lon):
+
+#     # 🌍 POLAR REGION
+#     if abs(lat) >= 66:
+#         return "Polar Region", ["Extreme Cold", "Blizzards", "Ice Storms"]
+
+#     # ❄️ TEMPERATE REGION
+#     elif 35 <= abs(lat) < 66:
+#         return "Temperate Region", ["Storms", "Floods", "Wildfires"]
+
+#     # 🌴 TROPICAL REGION
+#     elif 23 <= abs(lat) < 35:
+#         return "Subtropical Region", ["Cyclones", "Heatwaves", "Drought"]
+
+#     # 🌧️ EQUATORIAL REGION
+#     else:
+#         return "Equatorial Region", ["Heavy Rainfall", "Floods", "Landslides"]
+# # ---------------- GEOLOCATION ----------------
+# def get_coordinates(place):
+#     geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={place}"
+#     response = requests.get(geo_url).json()
+
+#     if "results" in response:
+#         result = response["results"][0]
+
+#         lat = result["latitude"]
+#         lon = result["longitude"]
+
+#         district = result.get("name", "Unknown")
+#         state = result.get("admin1", "Unknown")
+#         country = result.get("country", "Unknown")
+
+#         return lat, lon, district, state, country
+
+#     return None, None, None, None, None
+
+
+
+
+# def get_earthquakes():
+#     url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
+#     data = requests.get(url).json()
+#     return data["features"]
+
+# from math import radians, cos, sin, sqrt, atan2
+
+# def is_near(lat1, lon1, lat2, lon2, threshold_km=1000):
+#     R = 6371
+#     dlat = radians(lat2 - lat1)
+#     dlon = radians(lon2 - lon1)
+
+#     a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+#     c = 2 * atan2(sqrt(a), sqrt(1-a))
+
+#     return R * c <= threshold_km
+
+
+# def get_volcano_alerts():
+#     url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
+    
+#     try:
+#         response = requests.get(url, timeout=10)
+#         data = response.json()
+#     except:
+#         return []
+
+#     volcano_events = []
+
+#     for event in data.get("features", []):
+#         place = event["properties"].get("place", "").lower()
+
+#         if "volcano" in place or "mount" in place:
+#             volcano_events.append(event)
+
+#     return volcano_events
+# def build_live_risk_points():
+#     points = []
+
+#     earthquakes = get_earthquakes()
+
+#     for eq in earthquakes:
+#         coords = eq["geometry"]["coordinates"]
+#         lon, lat = coords[0], coords[1]
+
+#         mag = eq["properties"].get("mag", 0) or 0
+
+#         if mag >= 5:
+#             color = [255, 0, 0]      # HIGH
+#         elif mag >= 3:
+#             color = [255, 255, 0]    # MEDIUM
+#         else:
+#             color = [0, 255, 0]      # LOW
+
+#         points.append({
+#             "lat": lat,
+#             "lon": lon,
+#             "color": color,
+#             "size": 50000 + mag * 20000
+#         })
+
+#     return pd.DataFrame(points)
+
+# def get_country_risk_from_earthquakes():
+#     earthquakes = get_earthquakes()
+#     country_risk = {}
+
+#     for eq in earthquakes:
+#         place = eq["properties"]["place"]
+#         mag = eq["properties"].get("mag", 0) or 0
+
+#         if "," in place:
+#             country = place.split(",")[-1].strip()
+#         else:
+#             country = "Unknown"
+
+#         if country not in country_risk:
+#             country_risk[country] = 0
+
+#         country_risk[country] += mag
+
+#     # convert to color directly
+#     country_color = {}
+
+#     for country, score in country_risk.items():
+#         if score > 20:
+#             country_color[country] = [255, 0, 0, 150]   # RED
+#         elif score > 10:
+#             country_color[country] = [255, 255, 0, 150] # YELLOW
+#         else:
+#             country_color[country] = [0, 255, 0, 100]   # GREEN
+
+#     return country_color
+# world_map = load_world_map()
+# country_colors = get_country_risk_from_earthquakes()
+
+# # attach color to each country
+# for feature in world_map["features"]:
+#     country_name = feature["properties"]["name"]
+#     feature["properties"]["color"] = country_colors.get(
+#         country_name, [0, 255, 0, 80]
+#     )
+
+# geojson_layer = pdk.Layer(
+#     "GeoJsonLayer",
+#     world_map,
+#     get_fill_color="properties.color",
+#     pickable=True,
+#     stroked=True,
+#     filled=True,
+# )
+
+# view_state = pdk.ViewState(
+#     latitude=20,
+#     longitude=0,
+#     zoom=1.5,
+# )
+
+# st.pydeck_chart(pdk.Deck(
+#     layers=[geojson_layer],
+#     initial_view_state=view_state
+# ))
+# def get_fallback_resources():
+#     return {
+#         "hospitals": [
+#             "Government Hospital",
+#             "District Health Center",
+#             "Primary Health Clinic"
+#         ],
+#         "food": [
+#             "Community Shelter Kitchen",
+#             "Relief Camp Food Center",
+#             "Local Grocery Store"
+#         ]
+#     }
+
+
+       
+# # ---------------- MAS FUNCTIONS ----------------
+
+
+
+
+# def get_nearby_hospitals(lat, lon):
+#     query = f"""
+#     [out:json];
+#     (
+#       node["amenity"="hospital"](around:50000,{lat},{lon});
+#       node["amenity"="clinic"](around:50000,{lat},{lon});
+#       node["amenity"="pharmacy"](around:50000,{lat},{lon});
+#     );
+#     out;
+#     """
+#     url = "https://overpass-api.de/api/interpreter"
+#     response = requests.get(url, params={"data": query})
+#     return response.json().get("elements", []) if response.status_code == 200 else []
+
+
+# import random
+
+# def generate_ambulance_data(hospitals):
+#     ambulance_data = []
+
+#     for h in hospitals[:3]:
+#         name = h.get("tags", {}).get("name", "Hospital")
+
+#         ambulances = random.randint(2, 10)
+#         dispatched = random.randint(1, ambulances)
+
+#         ambulance_data.append({
+#             "name": name,
+#             "total": ambulances,
+#             "dispatched": dispatched
+#         })
+
+#     return ambulance_data
+
+
+# def get_food_places(lat, lon):
+#     query = f"""
+#     [out:json];
+#     (
+#       node["amenity"~"restaurant|cafe|fast_food"](around:30000,{lat},{lon});
+#       way["amenity"~"restaurant|cafe|fast_food"](around:30000,{lat},{lon});
+#       relation["amenity"~"restaurant|cafe|fast_food"](around:30000,{lat},{lon});
+#     );
+#     out center;
+#     """
+    
+#     url = "https://overpass-api.de/api/interpreter"
+#     response = requests.get(url, params={"data": query})
+    
+#     if response.status_code == 200:
+#         return response.json().get("elements", [])
+#     return []
+
+
+# # ---------------- INPUT ----------------
+# place = st.text_input("Enter Place Name")
+
+
+# # ---------------- BUTTON ----------------
+# if st.button("Analyze Risk"):
+#     earthquake_risk = "NONE"
+
+#     lat, lon, district, state, country = get_coordinates(place)
+
+#     if lat is None:
+#         st.error("Place not found ❌")
+#     else:
+#         st.success(
+#     f"📍 {district}, {state}, {country} (Lat: {lat}, Lon: {lon})"
+# )
+
+#         zone, disasters = get_global_climatic_zone(lat, lon)
+
+#         # Weather API
+#         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=precipitation,temperature_2m"
+#         data = requests.get(url).json()
+
+#         # ---------------- PREDICTION LOGIC ----------------
+
+#         # 🌧️ Flood Prediction (Future Rain Safe)
+#         if "hourly" in data and "precipitation" in data["hourly"]:
+#             rain_full = data["hourly"]["precipitation"]
+
+#             if len(rain_full) >= 12:
+#                 future_rain = sum(rain_full[:12])
+#             else:
+#                 future_rain = sum(rain_full)
+#         else:
+#             future_rain = 0
+
+#         if future_rain > 30:
+#             flood_risk = "HIGH"
+#             flood_prediction = "HIGH"
+#         elif future_rain > 15:
+#             flood_risk = "MEDIUM"
+#             flood_prediction = "MEDIUM"
+#         elif future_rain > 5:
+#             flood_risk = "LOW"
+#             flood_prediction = "LOW"
+#         else:
+#             flood_risk = "NO FLOOD RISK"
+#             flood_prediction = "NO RISK"
+#         weather = data["current_weather"]
+
+#         temperature = weather["temperature"]
+#         windspeed = weather["windspeed"]
+#         rain_data = data["hourly"]["precipitation"][:6]
+#         rain_data = data["hourly"]["precipitation"][:6]
+
+#         # Better detection
+#         rainfall = max(rain_data)
+
+#         # fallback if all zeros
+#         if rainfall == 0:
+#             rainfall = sum(rain_data)
+
+#         # EXTRA: detect rain using probability pattern
+#         is_raining = any(r > 0.5 for r in rain_data)   # take highest rainfall instead of sum
+
+        
+
+#         # ---------------- LOCATION + WEATHER ----------------
+#         col1, col2 = st.columns(2)
+
+#         with col1:
+#             st.subheader("📍 Location Info")
+#             st.write("Zone:", zone)
+#             st.write("Disasters:", disasters)
+
+#         with col2:
+#             st.subheader("🌤️ Weather Info")
+#             st.write("Temperature:", temperature, "°C")
+#             st.write("Wind Speed:", windspeed, "km/h")
+
+#         # ---------------- GRAPHS ----------------
+#         col3, col4 = st.columns(2)
+
+#         with col3:
+#             st.subheader("📈 Rainfall Trend")
+#             st.subheader("📈 Rainfall Trend (Next 24 Hours)")
+
+#             rain_data = data["hourly"]["precipitation"][:24]
+
+#             plt.figure()
+#             plt.plot(rain_data)
+#             plt.xlabel("Time (Hours)")
+#             plt.ylabel("Rainfall (mm)")
+#             plt.title("Rainfall Forecast")
+#             plt.grid()
+#             st.pyplot(plt)
+
+#         with col4:
+#             st.subheader("🌡️ Temperature Trend")
+#             st.subheader("🌡️ Temperature Trend (Next 24 Hours)")
+
+#             temp_data = data["hourly"]["temperature_2m"][:24]
+
+#             plt.figure()
+#             plt.plot(temp_data)
+#             plt.xlabel("Time (Hours)")
+#             plt.ylabel("Temperature (°C)")
+#             plt.title("Temperature Forecast")
+#             plt.grid()
+#             st.pyplot(plt)
+
+
+#         # ---------------- DASHBOARD ----------------
+#         st.subheader("🌍 Weather Dashboard")
+
+#         col5, col6, col7 = st.columns(3)
+
+#         col5.metric("🌧️ Rainfall (6hr)", f"{round(rainfall,2)} mm")
+#         col6.metric("🌡️ Temperature", f"{temperature} °C")
+#         col7.metric("💨 Wind Speed", f"{windspeed} km/h")
+#         st.subheader("🌧️ Rain Status")
+
+#         if is_raining:
+#             st.success("🌧️ Rain detected in forecast")
+#         else:
+#             st.info("☁️ No rain detected")
+
+#         # ---------------- FLOOD RISK ----------------
+#         risk_score = (rainfall * 0.7) + (windspeed * 0.3)
+
+#                 # 🌧️ Improved Rain Detection
+#         rain_data = data["hourly"]["precipitation"][:6]
+
+#         rainfall = max(rain_data)
+
+#         if rainfall == 0:
+#             rainfall = sum(rain_data)
+
+#         # detect rain presence
+#         # 🌊 Improved Flood Risk Logic
+
+#         if rainfall > 20:
+#             flood_risk = "HIGH"
+#         elif rainfall > 10:
+#             flood_risk = "MEDIUM"
+#         elif rainfall > 2:
+#             flood_risk = "LOW"
+#         else:
+#             flood_risk = "NO FLOOD RISK"
+
+        
+#         st.subheader("🌊 Flood Risk Status")
+#         st.write("Risk Score:", round(risk_score, 2))
+
+#         if flood_risk == "HIGH":
+#             st.error("🚨 HIGH FLOOD RISK")
+#         elif flood_risk == "MEDIUM":
+#             st.warning("⚠️ MEDIUM FLOOD RISK")
+#         elif flood_risk == "LOW":
+#             st.warning("✅ LOW FLOOD RISK")
+#         else:
+#             st.success("✅ NO FLOOD RISK")
+
+#         st.subheader("🌍 Earthquake Alerts")
+
+#         # st.subheader("🌧️ Rain Status")
+
+#         # if is_raining:
+#             # st.success("🌧️ Rain detected in forecast")
+#         # else:
+#             # st.info("☁️ No rain detected")
+
+#         earthquakes = get_earthquakes()
+
+#         earthquake_risk = "NONE"   # ✅ default
+#         best_eq = None
+#         max_magnitude = 0
+
+#         for eq in earthquakes:
+#             coords = eq["geometry"]["coordinates"]
+#             eq_lon, eq_lat = coords[0], coords[1]
+
+#             magnitude = eq["properties"]["mag"]
+#             place_name = eq["properties"]["place"]
+
+#             # ✅ Filter by distance
+#             if is_near(lat, lon, eq_lat, eq_lon):
+
+#                 # ✅ Pick strongest earthquake only
+#                 if magnitude > max_magnitude:
+#                     max_magnitude = magnitude
+#                     best_eq = (place_name, magnitude)
+
+#         # ✅ SHOW ONLY ONE RESULT
+#         if best_eq:
+#             place_name, magnitude = best_eq
+#         # 🌍 Earthquake Prediction (FIXED)
+
+#             if best_eq:
+#                 if magnitude >= 6:
+#                     earthquake_prediction = "HIGH"
+#                 elif magnitude >= 4:
+#                     earthquake_prediction = "MEDIUM"
+#                 else:
+#                     earthquake_prediction = "LOW"
+#             else:
+#                 earthquake_prediction = "LOW"
+
+#             st.write(f"📍 Location: {place_name}")
+#             st.write(f"📊 Magnitude: {magnitude}")
+
+#             if magnitude >= 6:
+#                 earthquake_risk = "HIGH"
+#                 st.error("🚨 HIGH EARTHQUAKE RISK")
+
+#             elif magnitude >= 4:
+#                 earthquake_risk = "MEDIUM"
+#                 st.warning("⚠️ MODERATE EARTHQUAKE")
+
+#             else:
+#                 earthquake_risk = "LOW"
+#                 st.success("🟢 LOW IMPACT EARTHQUAKE")
+
+#         else:
+#             earthquake_risk = "NONE"
+#             st.success("✅ No recent earthquakes nearby")
+
+#         # 🌍 Earthquake Prediction
+#         nearby_quakes = [
+#         eq for eq in earthquakes
+#             if is_near(lat, lon,
+#                     eq["geometry"]["coordinates"][1],
+#                     eq["geometry"]["coordinates"][0])
+#             and eq["properties"]["mag"] >= 4
+#         ]
+
+#         if len(nearby_quakes) > 3:
+#             earthquake_prediction = "HIGH"
+#         elif len(nearby_quakes) > 1:
+#             earthquake_prediction = "MEDIUM"
+#         else:
+#             earthquake_prediction = "LOW"
+
+#         # ---------------- VOLCANO ALERT ----------------
+
+#         st.subheader("🌋 Volcano Alerts")
+
+#         volcanoes = get_volcano_alerts()
+#         nearby_volcanoes = []
+
+#         # check nearby volcanoes (within 500 km)
+#         for v in volcanoes:
+#             coords = v["geometry"]["coordinates"]
+#             v_lon, v_lat = coords[0], coords[1]
+
+#             if is_near(lat, lon, v_lat, v_lon, threshold_km=500):
+#                 nearby_volcanoes.append(v)
+
+#         volcano_risk = "NONE"
+
+#         # show result
+#         if nearby_volcanoes:
+#             for v in nearby_volcanoes[:3]:
+#                 place_name = v["properties"]["place"]
+#                 mag = v["properties"]["mag"]
+
+#                 st.write(f"🌋 {place_name}")
+#                 st.write(f"Activity Level: {mag}")
+
+#             volcano_risk = "HIGH"
+#             st.error("🚨 VOLCANIC ACTIVITY DETECTED")
+
+#         else:
+#             st.success("✅ No volcanic activity detected nearby")
+#         # 🌋 Volcano Prediction
+#         # 🌋 Volcano Prediction (FIXED)
+
+#         if len(nearby_volcanoes) > 2:
+#             volcano_prediction = "HIGH"
+#         elif len(nearby_volcanoes) > 0:
+#             volcano_prediction = "MEDIUM"
+#         else:
+#             volcano_prediction = "LOW"
+
+#         if any("marapi" in v["properties"]["place"].lower() for v in volcanoes):
+#             volcano_risk = "HIGH"
+
+#         st.subheader("🔮 Disaster Prediction")
+
+#         st.write("🌊 Flood Prediction:", flood_prediction)
+#         st.write("🌍 Earthquake Prediction:", earthquake_prediction)
+#         st.write("🌋 Volcano Prediction:", volcano_prediction)
+
+
+#         if earthquake_risk == "HIGH" or volcano_risk == "HIGH":
+#             overall_risk = "HIGH"
+#         elif flood_risk == "MEDIUM":
+#             overall_risk = "MEDIUM"
+#         else:
+#             overall_risk = "LOW"
+
+
+#         # ---------------- MAS ACTIVATION ----------------
+#         if (flood_risk in ["HIGH","MEDIUM"] 
+#             or earthquake_risk in ["HIGH","MEDIUM"]
+#             or volcano_risk == "HIGH"):
+
+#                 st.subheader("🤖 Emergency Response System Activated")
+
+#                 # 🏥 Hospitals
+#                 hospitals = get_nearby_hospitals(lat, lon)
+#                 st.subheader("🏥 Nearby Hospitals")
+
+#                 fallback = get_fallback_resources()
+#                 for h in hospitals[:5]:
+#                     name = h.get("tags", {}).get("name", "Unnamed Hospital")
+
+#                     beds, ambulances = generate_resources(flood_risk)
+
+#                     st.write(f"🏥 {name}")
+#                     st.write(f"🛏️ Beds Available: {beds}")
+#                     import random
+
+#                     dispatched = random.randint(1, ambulances)
+
+#                     st.write(f"🚑 Available: {ambulances}")
+#                     st.write(f"🚨 Dispatched: {dispatched}")
+#                     st.write("📍 Route: Hospital → Disaster Location")
+#                     st.write("---")
+
+#                 else:
+#                     st.warning(" Hospitals found → showing emergency options")
+
+#                     for h in fallback["hospitals"]:
+#                         beds, ambulances = generate_resources(overall_risk)
+
+#                         st.write(f"🏥 {h}")
+#                         st.write(f"🛏️ Beds Available: {beds}")
+#                         st.write(f"🚑 Ambulances Available: {ambulances}")
+#                         st.write("---")
+
+#                 st.subheader("🚑 Ambulance Dispatch System")
+
+#                 ambulance_info = generate_ambulance_data(hospitals)
+
+#                 for a in ambulance_info:
+#                     st.write(f"🏥 {a['name']}")
+#                     st.write(f"🚑 Total Ambulances: {a['total']}")
+#                     st.write(f"🚨 Dispatched: {a['dispatched']}")
+
+#                # 🚗 Route
+#                 #st.subheader("🚗 Safe Evacuation Route")
+#                 safe_lat = lat + 0.05
+#                 safe_lon = lon + 0.05
+
+#                 for h in hospitals[:3]:
+#                     lat_h = h.get("lat")
+#                     lon_h = h.get("lon")
+
+#                     if lat_h and lon_h:
+#                         maps_url = f"https://www.google.com/maps/dir/{lat_h},{lon_h}/{lat},{lon}"
+
+#                         st.markdown(f"[🚑 View Ambulance Route from {h.get('tags', {}).get('name','Hospital')}]({maps_url})")
+
+#                 # --------- SAFE ROUTE GRAPH --------
+
+#                 maps_url = f"https://www.google.com/maps/dir/?api=1&origin={lat},{lon}&destination={safe_lat},{safe_lon}"
+
+#                 # st.subheader("🚗 Safe Evacuation Route")
+#                 #st.markdown(f"[🗺️ Open Route in Google Maps]({maps_url})")
+#                 # st.markdown(f"[Open Route in Google Maps]({maps_url})")
+
+
+
+
+
+#                 safe_lat = lat + 0.05
+#                 safe_lon = lon + 0.05
+
+#                 maps_url = f"https://www.google.com/maps/dir/?api=1&origin={lat},{lon}&destination={safe_lat},{safe_lon}"
+
+#                 st.subheader("🚗 Safe Evacuation Route (Google Maps)")
+#                 st.markdown(f"[🗺️ Open Route in Google Maps]({maps_url})")
+
+
+#                 # ---------------- DIJKSTRA ROUTE ----------------
+#                 st.subheader("🧠 Smart Safe Route")
+
+#                 # Risk-based weight
+#                 if flood_risk == "HIGH":
+#                     danger_weight = 100
+#                 else:
+#                     danger_weight = 20
+
+#                 # Graph (simple model)
+#                 graph = {
+#                     "Start": [("SafeZone1", 5), ("DangerZone", danger_weight)],
+#                     "SafeZone1": [("SafeZone2", 5)],
+#                     "DangerZone": [("SafeZone2", danger_weight)],
+#                     "SafeZone2": []
+#                 }
+
+#                 # Run algorithm
+#                 safe_path = dijkstra(graph, "Start", "SafeZone2")
+
+#                 # Show result
+#                 st.success(" → ".join(safe_path))
+            
+
+#                 # 🍞 Food
+#                 food_places = get_food_places(lat, lon)
+#                 st.subheader("🍞 Food Resources")
+
+#                 if food_places:
+#                     for f in food_places[:5]:
+#                         name = f.get("tags", {}).get("name", "Unnamed Place")
+#                         st.write(f"🍽️ {name}")
+#                 else:
+#                     st.warning(" Food data → showing emergency food sources")
+
+#                     for f in fallback["food"]:
+#                         st.write(f"🍞 {f}")
+#         # ---------------- MAP ----------------
+#         st.subheader("🗺️ Location Map")
+#         df = pd.DataFrame({"lat": [lat], "lon": [lon]})
+#         st.map(df)
+
+#         st.subheader("📄 Disaster Analysis Report")
+
+#         # STEP 1: Create base report
+#         report = f"""
+#         <b>DISASTER ANALYSIS REPORT</b><br/><br/>
+
+#         <b>1. Location Details</b><br/>
+#         Location: {district}, {state}, {country}<br/>
+#         Date: {current_date}<br/>
+#         Time: {current_time}<br/><br/>
+
+#         <b>2. Weather Information</b><br/>
+#         Rainfall (6hr): {round(rainfall,2)} mm<br/>
+#         Temperature: {temperature} °C<br/>
+#         Wind Speed: {windspeed} km/h<br/><br/>
+
+#         <b>3. Risk Assessment</b><br/>
+#         Flood Risk: {flood_risk}<br/>
+#         Earthquake Risk: {earthquake_risk}<br/>
+#         Volcano Risk: {volcano_risk}<br/><br/>
+
+#         <b>4. Predictions</b><br/>
+#         Flood Prediction: {flood_prediction}<br/>
+#         Earthquake Prediction: {earthquake_prediction}<br/>
+#         Volcano Prediction: {volcano_prediction}<br/><br/>
+#         """
+       
+
+#         # STEP 2: Add action text
+#         if flood_risk == "HIGH":
+#             report += "Immediate evacuation required."
+#         elif flood_risk == "MEDIUM":
+#             report += "Stay alert and monitor conditions."
+#         else:
+#             report += "No immediate risk.<br/>"
+
+#         report += "<b>5. Suggested Action</b><br/>"
+
+#         # Priority: Earthquake > Flood
+#         if earthquake_risk == "HIGH":
+#             report += " High earthquake risk. Move to open safe areas immediately.<br/>"
+#         elif earthquake_risk == "MEDIUM":
+#             report += "Moderate earthquake activity. Stay alert and avoid unsafe structures.<br/>"
+
+#         elif flood_risk == "HIGH":
+#             report += " High flood risk. Evacuate low-lying areas.<br/>"
+#         elif flood_risk == "MEDIUM":
+#             report += " Moderate flood risk. Stay alert.<br/>"
+
+#         elif flood_risk == "LOW":
+#             report += "ℹ Low flood risk. Stay cautious.<br/>"
+
+#         else:
+#             report += "No immediate disaster risk. Safe conditions.<br/>"
+
+#         report += "<br/><b>6. Trigger Source</b><br/>"
+
+#         if earthquake_risk in ["HIGH", "MEDIUM"]:
+#             report += "Earthquake Activity"
+#         elif flood_risk == "HIGH":
+#             report += "Flood Risk"
+#         else:
+#             report += "No Threat"
+
+#         # STEP 3: Add hospitals safely
+        
+
+#         if 'hospitals' in locals() and hospitals:
+#             report += "\n\n🏥 Nearby Hospitals:\n"
+#             for h in hospitals[:3]:
+#                 name = h.get("tags", {}).get("name:en") or h.get("tags", {}).get("name", "Unnamed")
+#                 report += f"- {name}\n"
+#             else:
+#                 report += "No data available\n"
+#         # STEP 4: Display report
+        
+
+
+#         # st.text_area("Report Summary", report, height=300)
+
+#         # SAFETY: make sure variables exist
+#         try:
+#             pdf = create_pdf(report, rain_data, temp_data, hospitals)
+#         except:
+#             pdf = create_pdf(report)
+
+#         st.download_button(
+#             label="📄 Download PDF Report",
+#             data=pdf,
+#             file_name="disaster_report.pdf",
+#             mime="application/pdf"
+#         )
+
+
+#         from io import BytesIO
+#         import re
+
+#         # Create a text-only version for TTS (remove emojis)
+#         # Remove non-ASCII characters (emojis)
+#         import re
+
+#         # Remove HTML tags
+#         clean_text = re.sub(r'<.*?>', '', report)
+
+#         # Remove emojis / special chars
+#         clean_text = re.sub(r'[^\x00-\x7F]+', '', clean_text)
+
+#         tts_text = clean_text.strip()
+#         tts_text = tts_text.strip()
+
+#         try:
+#             tts = gTTS(tts_text)
+#             mp3_buf = BytesIO()
+#             tts.write_to_fp(mp3_buf)
+#             mp3_buf.seek(0)
+#             audio_data = mp3_buf.read()
+#             # Check if it starts with MP3 header
+#             if audio_data.startswith(b'\xff\xfb') or audio_data.startswith(b'\xff\xf3') or audio_data.startswith(b'\xff\xf2'):
+#                 log_info("Audio data appears to be valid MP3")
+#             else:
+#                 log_info("Audio data may not be valid MP3")
+            
+#             # Save to file for debugging
+#             with open("debug_audio.mp3", "wb") as f:
+#                 f.write(audio_data)
+#             # log_info("Audio saved to debug_audio.mp3")
+            
+#             # Play audio with correct MIME type
+#             st.audio(audio_data, format="audio/mpeg")
+            
+#             # log_info("Audio played successfully")
+            
+#             # Also provide download button
+#             st.download_button(
+#                 label="🎵 Download Audio Report",
+#                 data=audio_data,
+#                 file_name="disaster_audio_report.mp3",
+#                 mime="audio/mpeg"
+#             )
+#         except Exception as e:
+#             log_error(f"Error generating or playing audio: {str(e)}", exc=e)
+
+
 import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
-from reportlab.platypus import Spacer, Image, Table, TableStyle
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from gtts import gTTS
-import os
 import logging
-from streamlit_mic_recorder import mic_recorder
-import speech_recognition as sr
-import tempfile
-import wave
-import io
-import pydeck as pdk
-import json
-import urllib.request
-from crewai import Agent, Task, Crew
-from reportlab.platypus import SimpleDocTemplate, Paragraph
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 import random
 import heapq
+import json
+import urllib.request
+import re
+import concurrent.futures
+from io import BytesIO
+from math import radians, cos, sin, sqrt, atan2, pi
 
-def dijkstra(graph, start, end):
-    queue = [(0, start)]
-    distances = {node: float('inf') for node in graph}
-    distances[start] = 0
-    previous = {}
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle,
+    PageBreak, ListFlowable, ListItem, KeepTogether, HRFlowable,
+)
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.graphics.shapes import Drawing, Circle, String
+from gtts import gTTS
+import pydeck as pdk
 
-    while queue:
-        cost, node = heapq.heappop(queue)
-
-        if node == end:
-            break
-
-        for neighbor, weight in graph[node]:
-            new_cost = cost + weight
-
-            if new_cost < distances[neighbor]:
-                distances[neighbor] = new_cost
-                previous[neighbor] = node
-                heapq.heappush(queue, (new_cost, neighbor))
-
-    # Reconstruct path
-    path = []
-    current = end
-    while current in previous:
-        path.insert(0, current)
-        current = previous[current]
-
-    path.insert(0, start)
-    return path
-
-
-
-def generate_resources(risk_level):
-    if risk_level == "HIGH":
-        beds = random.randint(0, 20)
-        ambulances = random.randint(0, 3)
-    elif risk_level == "MEDIUM":
-        beds = random.randint(10, 40)
-        ambulances = random.randint(2, 6)
-    else:
-        beds = random.randint(30, 80)
-        ambulances = random.randint(5, 10)
-
-    return beds, ambulances
-def load_world_map():
-    url = "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
-    with urllib.request.urlopen(url) as response:
-        return json.load(response)
-
-
-def generate_country_risk():
-    return {
-        "Indonesia": "HIGH",
-        "India": "MEDIUM",
-        "United States of America": "LOW"
-    }
-
-
-def get_color(risk):
-    if risk == "HIGH":
-        return [255, 0, 0, 120]
-    elif risk == "MEDIUM":
-        return [255, 255, 0, 120]
-    else:
-        return [0, 255, 0, 120]
-
-
-
-def create_pdf(report_text, rain_data=None, temp_data=None, hospitals=None):
-    doc = SimpleDocTemplate("report.pdf")
-    styles = getSampleStyleSheet()
-
-    content = []
-
-    # ---------- TITLE ----------
-    content.append(Paragraph("<b>DISASTER ANALYSIS REPORT</b>", styles["Title"]))
-    content.append(Spacer(1, 15))
-
-    # ---------- REPORT TEXT ----------
-    content.append(Paragraph(report_text, styles["Normal"]))
-    content.append(Spacer(1, 15))
-
-    # ---------- RAIN GRAPH ----------
-    if rain_data is not None and len(rain_data) > 0:
-        plt.figure()
-        plt.plot(rain_data)
-        plt.title("Rainfall Forecast")
-        plt.xlabel("Hours")
-        plt.ylabel("mm")
-        plt.grid()
-        plt.savefig("rain.png")
-        plt.close()
-
-        content.append(Paragraph("<b>Rainfall Analysis</b>", styles["Heading2"]))
-        content.append(Spacer(1, 10))
-        content.append(Image("rain.png", width=400, height=200))
-
-    # ---------- TEMP GRAPH ----------
-    if temp_data is not None and len(temp_data) > 0:
-        plt.figure()
-        plt.plot(temp_data)
-        plt.title("Temperature Forecast")
-        plt.xlabel("Hours")
-        plt.ylabel("°C")
-        plt.grid()
-        plt.savefig("temp.png")
-        plt.close()
-
-        content.append(Spacer(1, 15))
-        content.append(Paragraph("<b>Temperature Analysis</b>", styles["Heading2"]))
-        content.append(Spacer(1, 10))
-        content.append(Image("temp.png", width=400, height=200))
-
-    # ---------- HOSPITAL TABLE ----------
-    if hospitals:
-        content.append(Spacer(1, 20))
-        content.append(Paragraph("<b>Nearby Medical Resources</b>", styles["Heading2"]))
-        content.append(Spacer(1, 10))
-
-        table_data = [["Hospital", "Beds", "Ambulances"]]
-
-        for h in hospitals[:5]:
-            name = h.get("tags", {}).get("name", "Hospital")
-            beds = "Varies"
-            ambulances = "Available"
-
-            table_data.append([name, beds, ambulances])
-
-        table = Table(table_data)
-
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 1, colors.black),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ]))
-
-        content.append(table)
-
-    doc.build(content)
-
-    with open("report.pdf", "rb") as f:
-        return f.read()
-
-
+# =========================================================
+#  LOGGING
+# =========================================================
 def setup_logger():
     logging.basicConfig(
         level=logging.DEBUG,
@@ -180,7 +1064,6 @@ def setup_logger():
 
 
 def log_info(msg):
-    st.write(f"ℹ️ {msg}")
     logging.info(msg)
 
 
@@ -194,830 +1077,2462 @@ def log_error(msg, exc=None):
 
 setup_logger()
 
+# =========================================================
+#  CORE / ALGORITHMIC HELPERS
+# =========================================================
+def dijkstra(graph, start, end):
+    queue = [(0, start)]
+    distances = {node: float('inf') for node in graph}
+    distances[start] = 0
+    previous = {}
+
+    while queue:
+        cost, node = heapq.heappop(queue)
+        if node == end:
+            break
+        for neighbor, weight in graph[node]:
+            new_cost = cost + weight
+            if new_cost < distances[neighbor]:
+                distances[neighbor] = new_cost
+                previous[neighbor] = node
+                heapq.heappush(queue, (new_cost, neighbor))
+
+    path = []
+    current = end
+    while current in previous:
+        path.insert(0, current)
+        current = previous[current]
+    path.insert(0, start)
+    return path
 
 
-st.set_page_config(page_title="Disaster Copilot", layout="wide")
+def generate_resources(risk_level):
+    if risk_level == "HIGH":
+        beds = random.randint(0, 20)
+        ambulances = random.randint(0, 3)
+    elif risk_level == "MEDIUM":
+        beds = random.randint(10, 40)
+        ambulances = random.randint(2, 6)
+    else:
+        beds = random.randint(30, 80)
+        ambulances = random.randint(5, 10)
+    return beds, ambulances
 
 
-st.title("🌍 Disaster Copilot Dashboard")
-st.markdown("Real-time disaster risk analysis using weather intelligence")
-now = datetime.datetime.now()
-
-current_date = now.strftime("%d %B %Y")
-current_time = now.strftime("%I:%M %p")
-st.markdown(f"📅 Date: {current_date} | ⏰ Time: {current_time}")
-st.subheader("🌍 Live Disaster Risk Map")
-
-st.info("💡 View high-risk zones (red) and enter a location below to analyze")
+def haversine_km(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return R * c
 
 
+def is_near(lat1, lon1, lat2, lon2, threshold_km=1000):
+    return haversine_km(lat1, lon1, lat2, lon2) <= threshold_km
 
 
-# ---------------- MAP SECTION ----------------
-
-
-# ---------------- ZONE FUNCTION ----------------
 def get_global_climatic_zone(lat, lon):
-
-    # 🌍 POLAR REGION
     if abs(lat) >= 66:
         return "Polar Region", ["Extreme Cold", "Blizzards", "Ice Storms"]
-
-    # ❄️ TEMPERATE REGION
     elif 35 <= abs(lat) < 66:
         return "Temperate Region", ["Storms", "Floods", "Wildfires"]
-
-    # 🌴 TROPICAL REGION
     elif 23 <= abs(lat) < 35:
         return "Subtropical Region", ["Cyclones", "Heatwaves", "Drought"]
-
-    # 🌧️ EQUATORIAL REGION
     else:
         return "Equatorial Region", ["Heavy Rainfall", "Floods", "Landslides"]
-# ---------------- GEOLOCATION ----------------
+
+
+# =========================================================
+#  EXTERNAL DATA FETCHERS (cached to avoid refetching on every tab render)
+# =========================================================
+@st.cache_data(ttl=600, show_spinner=False)
+def load_world_map():
+    url = "https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json"
+    with urllib.request.urlopen(url) as response:
+        return json.load(response)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_earthquakes():
+    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
+    data = requests.get(url, timeout=10).json()
+    return data["features"]
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_volcano_alerts():
+    try:
+        earthquakes = get_earthquakes()
+    except Exception:
+        return []
+
+    volcano_events = []
+    for event in earthquakes:
+        place = event["properties"].get("place", "").lower()
+        if "volcano" in place or "mount" in place:
+            volcano_events.append(event)
+    return volcano_events
+
+
+@st.cache_data(ttl=300, show_spinner=False)
 def get_coordinates(place):
     geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={place}"
-    response = requests.get(geo_url).json()
+    response = requests.get(geo_url, timeout=10).json()
 
     if "results" in response:
         result = response["results"][0]
-
         lat = result["latitude"]
         lon = result["longitude"]
-
         district = result.get("name", "Unknown")
         state = result.get("admin1", "Unknown")
         country = result.get("country", "Unknown")
-
         return lat, lon, district, state, country
 
     return None, None, None, None, None
 
 
+# Performance tuning: keep the whole live-data phase well under the
+# dashboard's loading budget. If Overpass can't answer within this
+# window, we stop trying and fall back to simulated data immediately
+# rather than let the UI hang.
+OVERPASS_REQUEST_TIMEOUT_S = 4      # per-endpoint timeout (3-5s range)
+OVERPASS_TOTAL_BUDGET_S = 5         # hard ceiling across all endpoint attempts
 
 
-def get_earthquakes():
-    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
-    data = requests.get(url).json()
-    return data["features"]
+@st.cache_data(ttl=600, show_spinner=False)
+def _run_overpass_query(query):
+    """Shared Overpass request helper. Uses POST with an explicit
+    User-Agent. overpass-api.de has been intermittently returning 406 for
+    many clients as a server-side issue, so a known-good mirror is tried
+    first. A short per-request timeout plus an overall time budget
+    guarantees we never block the dashboard waiting on a slow/dead
+    endpoint — once the budget runs out we raise immediately so the
+    caller can fall back to simulated data."""
+    import time
 
-from math import radians, cos, sin, sqrt, atan2
+    headers = {
+        "User-Agent": "DisasterCopilot/1.0 (contact: disaster-copilot@example.com)",
+        "Accept": "application/json",
+    }
+    endpoints = [
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass-api.de/api/interpreter",
+    ]
 
-def is_near(lat1, lon1, lat2, lon2, threshold_km=1000):
-    R = 6371
-    dlat = radians(lat2 - lat1)
-    dlon = radians(lon2 - lon1)
+    start = time.monotonic()
+    last_exc = RuntimeError("No Overpass endpoint was attempted")
 
-    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
-    c = 2 * atan2(sqrt(a), sqrt(1-a))
+    for url in endpoints:
+        remaining = OVERPASS_TOTAL_BUDGET_S - (time.monotonic() - start)
+        if remaining <= 0.5:
+            break
+        try:
+            response = requests.post(
+                url, data={"data": query}, headers=headers,
+                timeout=min(OVERPASS_REQUEST_TIMEOUT_S, remaining),
+            )
+            response.raise_for_status()
+            return response.json().get("elements", [])
+        except requests.exceptions.RequestException as e:
+            last_exc = e
+            continue
 
-    return R * c <= threshold_km
+    raise last_exc
 
 
-def get_volcano_alerts():
-    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
-    
-    try:
-        response = requests.get(url, timeout=10)
-        data = response.json()
-    except:
-        return []
+# ---------------------------------------------------------
+#  Single combined live-data query
+#
+#  Previously each resource category (hospitals, food, police, fire,
+#  blood banks, ambulance stations...) triggered its own Overpass call.
+#  That meant up to 6+ sequential network round-trips per analysis —
+#  the main cause of slow loading. Now everything is fetched in ONE
+#  request and classified client-side, cached per (lat, lon).
+# ---------------------------------------------------------
+def _classify_osm_element(tags):
+    amenity = tags.get("amenity")
+    if amenity in ("hospital", "clinic", "pharmacy"):
+        return "hospital"
+    if amenity in ("restaurant", "cafe", "fast_food", "marketplace"):
+        return "food"
+    if tags.get("shop") == "supermarket":
+        return "food"
+    if tags.get("social_facility") == "shelter" or tags.get("emergency") == "assembly_point":
+        return "shelter"
+    if amenity == "police":
+        return "police_station"
+    if amenity == "fire_station":
+        return "fire_station"
+    if tags.get("healthcare") == "blood_donation" or amenity == "blood_bank":
+        return "blood_bank"
+    if tags.get("emergency") == "ambulance_station":
+        return "ambulance_station"
+    return None
 
-    volcano_events = []
 
-    for event in data.get("features", []):
-        place = event["properties"].get("place", "").lower()
+def _build_resource_record(tags, category, r_lat, r_lon, lat, lon):
+    if category == "hospital":
+        type_label = tags.get("amenity", "hospital")
+    elif category == "food":
+        type_label = _FOOD_TYPE_LABELS.get(_food_type(tags), "Food Resource")
+    elif category == "shelter":
+        type_label = "Relief Shelter"
+    else:
+        type_label = CATEGORY_LABELS.get(category, category.replace("_", " ").title())
 
-        if "volcano" in place or "mount" in place:
-            volcano_events.append(event)
-
-    return volcano_events
-def build_live_risk_points():
-    points = []
-
-    earthquakes = get_earthquakes()
-
-    for eq in earthquakes:
-        coords = eq["geometry"]["coordinates"]
-        lon, lat = coords[0], coords[1]
-
-        mag = eq["properties"].get("mag", 0) or 0
-
-        if mag >= 5:
-            color = [255, 0, 0]      # HIGH
-        elif mag >= 3:
-            color = [255, 255, 0]    # MEDIUM
-        else:
-            color = [0, 255, 0]      # LOW
-
-        points.append({
-            "lat": lat,
-            "lon": lon,
-            "color": color,
-            "size": 50000 + mag * 20000
-        })
-
-    return pd.DataFrame(points)
-
-def get_country_risk_from_earthquakes():
-    earthquakes = get_earthquakes()
-    country_risk = {}
-
-    for eq in earthquakes:
-        place = eq["properties"]["place"]
-        mag = eq["properties"].get("mag", 0) or 0
-
-        if "," in place:
-            country = place.split(",")[-1].strip()
-        else:
-            country = "Unknown"
-
-        if country not in country_risk:
-            country_risk[country] = 0
-
-        country_risk[country] += mag
-
-    # convert to color directly
-    country_color = {}
-
-    for country, score in country_risk.items():
-        if score > 20:
-            country_color[country] = [255, 0, 0, 150]   # RED
-        elif score > 10:
-            country_color[country] = [255, 255, 0, 150] # YELLOW
-        else:
-            country_color[country] = [0, 255, 0, 100]   # GREEN
-
-    return country_color
-world_map = load_world_map()
-country_colors = get_country_risk_from_earthquakes()
-
-# attach color to each country
-for feature in world_map["features"]:
-    country_name = feature["properties"]["name"]
-    feature["properties"]["color"] = country_colors.get(
-        country_name, [0, 255, 0, 80]
-    )
-
-geojson_layer = pdk.Layer(
-    "GeoJsonLayer",
-    world_map,
-    get_fill_color="properties.color",
-    pickable=True,
-    stroked=True,
-    filled=True,
-)
-
-view_state = pdk.ViewState(
-    latitude=20,
-    longitude=0,
-    zoom=1.5,
-)
-
-st.pydeck_chart(pdk.Deck(
-    layers=[geojson_layer],
-    initial_view_state=view_state
-))
-def get_fallback_resources():
     return {
-        "hospitals": [
-            "Government Hospital",
-            "District Health Center",
-            "Primary Health Clinic"
-        ],
-        "food": [
-            "Community Shelter Kitchen",
-            "Relief Camp Food Center",
-            "Local Grocery Store"
-        ]
+        "name": tags.get("name", f"Unnamed {type_label}"),
+        "type": type_label,
+        "address": _format_address(tags),
+        "contact": _format_contact(tags),
+        "lat": r_lat,
+        "lon": r_lon,
+        "distance_km": round(haversine_km(lat, lon, r_lat, r_lon), 1),
+        "source": "live",
     }
 
 
-       
-# ---------------- MAS FUNCTIONS ----------------
+def _build_master_overpass_query(lat, lon):
+    """One query covering every live-fetchable category. Radii are kept
+    modest to keep Overpass' own server-side processing fast, which
+    matters as much as our client-side timeout for hitting a 2-3s feel."""
+    return f"""
+    [out:json][timeout:20];
+    (
+      node["amenity"~"hospital|clinic|pharmacy"](around:25000,{lat},{lon});
+      way["amenity"~"hospital|clinic|pharmacy"](around:25000,{lat},{lon});
+      node["amenity"~"restaurant|cafe|fast_food|marketplace"](around:20000,{lat},{lon});
+      way["amenity"~"restaurant|cafe|fast_food|marketplace"](around:20000,{lat},{lon});
+      node["shop"="supermarket"](around:20000,{lat},{lon});
+      node["social_facility"="shelter"](around:20000,{lat},{lon});
+      node["emergency"="assembly_point"](around:20000,{lat},{lon});
+      node["amenity"="police"](around:15000,{lat},{lon});
+      node["amenity"="fire_station"](around:15000,{lat},{lon});
+      node["healthcare"="blood_donation"](around:15000,{lat},{lon});
+      node["amenity"="blood_bank"](around:15000,{lat},{lon});
+      node["emergency"="ambulance_station"](around:15000,{lat},{lon});
+    );
+    out center tags;
+    """
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_all_live_resources(lat, lon):
+    """Fetches and classifies all live resource categories in a single
+    Overpass round-trip. Returns (buckets, error) where buckets is a
+    dict of category -> sorted list of normalized records. On any
+    failure (timeout, budget exceeded, bad response), returns an empty
+    dict + error message so callers can fall straight into simulation
+    without retrying."""
+    query = _build_master_overpass_query(lat, lon)
+    try:
+        raw_elements = _run_overpass_query(query)
+    except requests.exceptions.Timeout:
+        return {}, "Live resource data request timed out."
+    except requests.exceptions.RequestException as e:
+        return {}, f"Could not reach live resource data service: {e}"
+    except ValueError:
+        return {}, "Live resource data service returned an unreadable response."
+
+    buckets = {}
+    for el in raw_elements:
+        tags = el.get("tags", {})
+        category = _classify_osm_element(tags)
+        if not category:
+            continue
+        r_lat, r_lon = _element_coords(el)
+        if r_lat is None or r_lon is None:
+            continue
+        buckets.setdefault(category, []).append(
+            _build_resource_record(tags, category, r_lat, r_lon, lat, lon)
+        )
+
+    for items in buckets.values():
+        items.sort(key=lambda r: r["distance_km"])
+
+    return buckets, None
+
+
+def _format_address(tags):
+    parts = [
+        tags.get("addr:housenumber"),
+        tags.get("addr:street"),
+        tags.get("addr:suburb") or tags.get("addr:neighbourhood"),
+        tags.get("addr:city"),
+        tags.get("addr:postcode"),
+    ]
+    address = ", ".join(p for p in parts if p)
+    return address or None
+
+
+def _format_contact(tags):
+    return tags.get("contact:phone") or tags.get("phone") or None
+
+
+def _element_coords(element):
+    if "lat" in element and "lon" in element:
+        return element["lat"], element["lon"]
+    center = element.get("center")
+    if center:
+        return center.get("lat"), center.get("lon")
+    return None, None
 
 
 def get_nearby_hospitals(lat, lon):
-    query = f"""
-    [out:json];
-    (
-      node["amenity"="hospital"](around:50000,{lat},{lon});
-      node["amenity"="clinic"](around:50000,{lat},{lon});
-      node["amenity"="pharmacy"](around:50000,{lat},{lon});
-    );
-    out;
-    """
-    url = "https://overpass-api.de/api/interpreter"
-    response = requests.get(url, params={"data": query})
-    return response.json().get("elements", []) if response.status_code == 200 else []
+    """Returns (hospitals, error_message), sourced from the shared
+    single-request live fetch (see fetch_all_live_resources)."""
+    buckets, error = fetch_all_live_resources(lat, lon)
+    return buckets.get("hospital", []), error
 
 
-import random
+_FOOD_TYPE_LABELS = {
+    "restaurant": "Restaurant",
+    "cafe": "Cafe",
+    "fast_food": "Fast Food",
+    "marketplace": "Marketplace",
+    "supermarket": "Supermarket",
+    "shelter": "Relief Shelter",
+    "assembly_point": "Emergency Assembly Point",
+}
 
-def generate_ambulance_data(hospitals):
-    ambulance_data = []
 
-    for h in hospitals[:3]:
-        name = h.get("tags", {}).get("name", "Hospital")
-
-        ambulances = random.randint(2, 10)
-        dispatched = random.randint(1, ambulances)
-
-        ambulance_data.append({
-            "name": name,
-            "total": ambulances,
-            "dispatched": dispatched
-        })
-
-    return ambulance_data
+def _food_type(tags):
+    return (
+        tags.get("amenity")
+        or tags.get("shop")
+        or tags.get("social_facility")
+        or tags.get("emergency")
+        or "other"
+    )
 
 
 def get_food_places(lat, lon):
-    query = f"""
-    [out:json];
-    (
-      node["amenity"~"restaurant|cafe|fast_food"](around:30000,{lat},{lon});
-      way["amenity"~"restaurant|cafe|fast_food"](around:30000,{lat},{lon});
-      relation["amenity"~"restaurant|cafe|fast_food"](around:30000,{lat},{lon});
-    );
-    out center;
-    """
-    
-    url = "https://overpass-api.de/api/interpreter"
-    response = requests.get(url, params={"data": query})
-    
-    if response.status_code == 200:
-        return response.json().get("elements", [])
-    return []
+    """Returns (food_places, error_message), sourced from the shared
+    single-request live fetch (see fetch_all_live_resources)."""
+    buckets, error = fetch_all_live_resources(lat, lon)
+    return buckets.get("food", []), error
 
 
-# ---------------- INPUT ----------------
-place = st.text_input("Enter Place Name")
+def get_country_risk_from_earthquakes(earthquakes):
+    country_risk = {}
+    for eq in earthquakes:
+        place = eq["properties"]["place"]
+        mag = eq["properties"].get("mag", 0) or 0
+        country = place.split(",")[-1].strip() if "," in place else "Unknown"
+        country_risk[country] = country_risk.get(country, 0) + mag
 
-
-# ---------------- BUTTON ----------------
-if st.button("Analyze Risk"):
-    earthquake_risk = "NONE"
-
-    lat, lon, district, state, country = get_coordinates(place)
-
-    if lat is None:
-        st.error("Place not found ❌")
-    else:
-        st.success(
-    f"📍 {district}, {state}, {country} (Lat: {lat}, Lon: {lon})"
-)
-
-        zone, disasters = get_global_climatic_zone(lat, lon)
-
-        # Weather API
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=precipitation,temperature_2m"
-        data = requests.get(url).json()
-
-        # ---------------- PREDICTION LOGIC ----------------
-
-        # 🌧️ Flood Prediction (Future Rain Safe)
-        if "hourly" in data and "precipitation" in data["hourly"]:
-            rain_full = data["hourly"]["precipitation"]
-
-            if len(rain_full) >= 12:
-                future_rain = sum(rain_full[:12])
-            else:
-                future_rain = sum(rain_full)
+    country_color = {}
+    for country, score in country_risk.items():
+        if score > 20:
+            country_color[country] = [255, 0, 0, 150]
+        elif score > 10:
+            country_color[country] = [255, 255, 0, 150]
         else:
-            future_rain = 0
-
-        if future_rain > 30:
-            flood_risk = "HIGH"
-            flood_prediction = "HIGH"
-        elif future_rain > 15:
-            flood_risk = "MEDIUM"
-            flood_prediction = "MEDIUM"
-        elif future_rain > 5:
-            flood_risk = "LOW"
-            flood_prediction = "LOW"
-        else:
-            flood_risk = "NO FLOOD RISK"
-            flood_prediction = "NO RISK"
-        weather = data["current_weather"]
-
-        temperature = weather["temperature"]
-        windspeed = weather["windspeed"]
-        rain_data = data["hourly"]["precipitation"][:6]
-        rain_data = data["hourly"]["precipitation"][:6]
-
-        # Better detection
-        rainfall = max(rain_data)
-
-        # fallback if all zeros
-        if rainfall == 0:
-            rainfall = sum(rain_data)
-
-        # EXTRA: detect rain using probability pattern
-        is_raining = any(r > 0.5 for r in rain_data)   # take highest rainfall instead of sum
-
-        
-
-        # ---------------- LOCATION + WEATHER ----------------
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("📍 Location Info")
-            st.write("Zone:", zone)
-            st.write("Disasters:", disasters)
-
-        with col2:
-            st.subheader("🌤️ Weather Info")
-            st.write("Temperature:", temperature, "°C")
-            st.write("Wind Speed:", windspeed, "km/h")
-
-        # ---------------- GRAPHS ----------------
-        col3, col4 = st.columns(2)
-
-        with col3:
-            st.subheader("📈 Rainfall Trend")
-            st.subheader("📈 Rainfall Trend (Next 24 Hours)")
-
-            rain_data = data["hourly"]["precipitation"][:24]
-
-            plt.figure()
-            plt.plot(rain_data)
-            plt.xlabel("Time (Hours)")
-            plt.ylabel("Rainfall (mm)")
-            plt.title("Rainfall Forecast")
-            plt.grid()
-            st.pyplot(plt)
-
-        with col4:
-            st.subheader("🌡️ Temperature Trend")
-            st.subheader("🌡️ Temperature Trend (Next 24 Hours)")
-
-            temp_data = data["hourly"]["temperature_2m"][:24]
-
-            plt.figure()
-            plt.plot(temp_data)
-            plt.xlabel("Time (Hours)")
-            plt.ylabel("Temperature (°C)")
-            plt.title("Temperature Forecast")
-            plt.grid()
-            st.pyplot(plt)
-
-
-        # ---------------- DASHBOARD ----------------
-        st.subheader("🌍 Weather Dashboard")
-
-        col5, col6, col7 = st.columns(3)
-
-        col5.metric("🌧️ Rainfall (6hr)", f"{round(rainfall,2)} mm")
-        col6.metric("🌡️ Temperature", f"{temperature} °C")
-        col7.metric("💨 Wind Speed", f"{windspeed} km/h")
-        st.subheader("🌧️ Rain Status")
-
-        if is_raining:
-            st.success("🌧️ Rain detected in forecast")
-        else:
-            st.info("☁️ No rain detected")
-
-        # ---------------- FLOOD RISK ----------------
-        risk_score = (rainfall * 0.7) + (windspeed * 0.3)
-
-                # 🌧️ Improved Rain Detection
-        rain_data = data["hourly"]["precipitation"][:6]
-
-        rainfall = max(rain_data)
-
-        if rainfall == 0:
-            rainfall = sum(rain_data)
-
-        # detect rain presence
-        # 🌊 Improved Flood Risk Logic
-
-        if rainfall > 20:
-            flood_risk = "HIGH"
-        elif rainfall > 10:
-            flood_risk = "MEDIUM"
-        elif rainfall > 2:
-            flood_risk = "LOW"
-        else:
-            flood_risk = "NO FLOOD RISK"
-
-        
-        st.subheader("🌊 Flood Risk Status")
-        st.write("Risk Score:", round(risk_score, 2))
-
-        if flood_risk == "HIGH":
-            st.error("🚨 HIGH FLOOD RISK")
-        elif flood_risk == "MEDIUM":
-            st.warning("⚠️ MEDIUM FLOOD RISK")
-        elif flood_risk == "LOW":
-            st.warning("✅ LOW FLOOD RISK")
-        else:
-            st.success("✅ NO FLOOD RISK")
-
-        st.subheader("🌍 Earthquake Alerts")
-
-        # st.subheader("🌧️ Rain Status")
-
-        # if is_raining:
-            # st.success("🌧️ Rain detected in forecast")
-        # else:
-            # st.info("☁️ No rain detected")
-
-        earthquakes = get_earthquakes()
-
-        earthquake_risk = "NONE"   # ✅ default
-        best_eq = None
-        max_magnitude = 0
-
-        for eq in earthquakes:
-            coords = eq["geometry"]["coordinates"]
-            eq_lon, eq_lat = coords[0], coords[1]
-
-            magnitude = eq["properties"]["mag"]
-            place_name = eq["properties"]["place"]
-
-            # ✅ Filter by distance
-            if is_near(lat, lon, eq_lat, eq_lon):
-
-                # ✅ Pick strongest earthquake only
-                if magnitude > max_magnitude:
-                    max_magnitude = magnitude
-                    best_eq = (place_name, magnitude)
-
-        # ✅ SHOW ONLY ONE RESULT
-        if best_eq:
-            place_name, magnitude = best_eq
-        # 🌍 Earthquake Prediction (FIXED)
-
-            if best_eq:
-                if magnitude >= 6:
-                    earthquake_prediction = "HIGH"
-                elif magnitude >= 4:
-                    earthquake_prediction = "MEDIUM"
-                else:
-                    earthquake_prediction = "LOW"
-            else:
-                earthquake_prediction = "LOW"
-
-            st.write(f"📍 Location: {place_name}")
-            st.write(f"📊 Magnitude: {magnitude}")
-
-            if magnitude >= 6:
-                earthquake_risk = "HIGH"
-                st.error("🚨 HIGH EARTHQUAKE RISK")
-
-            elif magnitude >= 4:
-                earthquake_risk = "MEDIUM"
-                st.warning("⚠️ MODERATE EARTHQUAKE")
-
-            else:
-                earthquake_risk = "LOW"
-                st.success("🟢 LOW IMPACT EARTHQUAKE")
-
-        else:
-            earthquake_risk = "NONE"
-            st.success("✅ No recent earthquakes nearby")
-
-        # 🌍 Earthquake Prediction
-        nearby_quakes = [
-        eq for eq in earthquakes
-            if is_near(lat, lon,
-                    eq["geometry"]["coordinates"][1],
-                    eq["geometry"]["coordinates"][0])
-            and eq["properties"]["mag"] >= 4
-        ]
-
-        if len(nearby_quakes) > 3:
-            earthquake_prediction = "HIGH"
-        elif len(nearby_quakes) > 1:
-            earthquake_prediction = "MEDIUM"
-        else:
-            earthquake_prediction = "LOW"
-
-        # ---------------- VOLCANO ALERT ----------------
-
-        st.subheader("🌋 Volcano Alerts")
-
-        volcanoes = get_volcano_alerts()
-        nearby_volcanoes = []
-
-        # check nearby volcanoes (within 500 km)
-        for v in volcanoes:
-            coords = v["geometry"]["coordinates"]
-            v_lon, v_lat = coords[0], coords[1]
-
-            if is_near(lat, lon, v_lat, v_lon, threshold_km=500):
-                nearby_volcanoes.append(v)
-
-        volcano_risk = "NONE"
-
-        # show result
-        if nearby_volcanoes:
-            for v in nearby_volcanoes[:3]:
-                place_name = v["properties"]["place"]
-                mag = v["properties"]["mag"]
-
-                st.write(f"🌋 {place_name}")
-                st.write(f"Activity Level: {mag}")
-
-            volcano_risk = "HIGH"
-            st.error("🚨 VOLCANIC ACTIVITY DETECTED")
-
-        else:
-            st.success("✅ No volcanic activity detected nearby")
-        # 🌋 Volcano Prediction
-        # 🌋 Volcano Prediction (FIXED)
-
-        if len(nearby_volcanoes) > 2:
-            volcano_prediction = "HIGH"
-        elif len(nearby_volcanoes) > 0:
-            volcano_prediction = "MEDIUM"
-        else:
-            volcano_prediction = "LOW"
-
-        if any("marapi" in v["properties"]["place"].lower() for v in volcanoes):
-            volcano_risk = "HIGH"
-
-        st.subheader("🔮 Disaster Prediction")
-
-        st.write("🌊 Flood Prediction:", flood_prediction)
-        st.write("🌍 Earthquake Prediction:", earthquake_prediction)
-        st.write("🌋 Volcano Prediction:", volcano_prediction)
-
-
-        if earthquake_risk == "HIGH" or volcano_risk == "HIGH":
-            overall_risk = "HIGH"
-        elif flood_risk == "MEDIUM":
-            overall_risk = "MEDIUM"
-        else:
-            overall_risk = "LOW"
-
-
-        # ---------------- MAS ACTIVATION ----------------
-        if (flood_risk in ["HIGH","MEDIUM"] 
-            or earthquake_risk in ["HIGH","MEDIUM"]
-            or volcano_risk == "HIGH"):
-
-                st.subheader("🤖 Emergency Response System Activated")
-
-                # 🏥 Hospitals
-                hospitals = get_nearby_hospitals(lat, lon)
-                st.subheader("🏥 Nearby Hospitals")
-
-                fallback = get_fallback_resources()
-                for h in hospitals[:5]:
-                    name = h.get("tags", {}).get("name", "Unnamed Hospital")
-
-                    beds, ambulances = generate_resources(flood_risk)
-
-                    st.write(f"🏥 {name}")
-                    st.write(f"🛏️ Beds Available: {beds}")
-                    import random
-
-                    dispatched = random.randint(1, ambulances)
-
-                    st.write(f"🚑 Available: {ambulances}")
-                    st.write(f"🚨 Dispatched: {dispatched}")
-                    st.write("📍 Route: Hospital → Disaster Location")
-                    st.write("---")
-
-                else:
-                    st.warning(" Hospitals found → showing emergency options")
-
-                    for h in fallback["hospitals"]:
-                        beds, ambulances = generate_resources(overall_risk)
-
-                        st.write(f"🏥 {h}")
-                        st.write(f"🛏️ Beds Available: {beds}")
-                        st.write(f"🚑 Ambulances Available: {ambulances}")
-                        st.write("---")
-
-                st.subheader("🚑 Ambulance Dispatch System")
-
-                ambulance_info = generate_ambulance_data(hospitals)
-
-                for a in ambulance_info:
-                    st.write(f"🏥 {a['name']}")
-                    st.write(f"🚑 Total Ambulances: {a['total']}")
-                    st.write(f"🚨 Dispatched: {a['dispatched']}")
-
-               # 🚗 Route
-                #st.subheader("🚗 Safe Evacuation Route")
-                safe_lat = lat + 0.05
-                safe_lon = lon + 0.05
-
-                for h in hospitals[:3]:
-                    lat_h = h.get("lat")
-                    lon_h = h.get("lon")
-
-                    if lat_h and lon_h:
-                        maps_url = f"https://www.google.com/maps/dir/{lat_h},{lon_h}/{lat},{lon}"
-
-                        st.markdown(f"[🚑 View Ambulance Route from {h.get('tags', {}).get('name','Hospital')}]({maps_url})")
-
-                # --------- SAFE ROUTE GRAPH --------
-
-                maps_url = f"https://www.google.com/maps/dir/?api=1&origin={lat},{lon}&destination={safe_lat},{safe_lon}"
-
-                # st.subheader("🚗 Safe Evacuation Route")
-                #st.markdown(f"[🗺️ Open Route in Google Maps]({maps_url})")
-                # st.markdown(f"[Open Route in Google Maps]({maps_url})")
-
-
-
-
-
-                safe_lat = lat + 0.05
-                safe_lon = lon + 0.05
-
-                maps_url = f"https://www.google.com/maps/dir/?api=1&origin={lat},{lon}&destination={safe_lat},{safe_lon}"
-
-                st.subheader("🚗 Safe Evacuation Route (Google Maps)")
-                st.markdown(f"[🗺️ Open Route in Google Maps]({maps_url})")
-
-
-                # ---------------- DIJKSTRA ROUTE ----------------
-                st.subheader("🧠 Smart Safe Route")
-
-                # Risk-based weight
-                if flood_risk == "HIGH":
-                    danger_weight = 100
-                else:
-                    danger_weight = 20
-
-                # Graph (simple model)
-                graph = {
-                    "Start": [("SafeZone1", 5), ("DangerZone", danger_weight)],
-                    "SafeZone1": [("SafeZone2", 5)],
-                    "DangerZone": [("SafeZone2", danger_weight)],
-                    "SafeZone2": []
-                }
-
-                # Run algorithm
-                safe_path = dijkstra(graph, "Start", "SafeZone2")
-
-                # Show result
-                st.success(" → ".join(safe_path))
-            
-
-                # 🍞 Food
-                food_places = get_food_places(lat, lon)
-                st.subheader("🍞 Food Resources")
-
-                if food_places:
-                    for f in food_places[:5]:
-                        name = f.get("tags", {}).get("name", "Unnamed Place")
-                        st.write(f"🍽️ {name}")
-                else:
-                    st.warning(" Food data → showing emergency food sources")
-
-                    for f in fallback["food"]:
-                        st.write(f"🍞 {f}")
-        # ---------------- MAP ----------------
-        st.subheader("🗺️ Location Map")
-        df = pd.DataFrame({"lat": [lat], "lon": [lon]})
-        st.map(df)
-
-        st.subheader("📄 Disaster Analysis Report")
-
-        # STEP 1: Create base report
-        report = f"""
-        <b>DISASTER ANALYSIS REPORT</b><br/><br/>
-
-        <b>1. Location Details</b><br/>
-        Location: {district}, {state}, {country}<br/>
-        Date: {current_date}<br/>
-        Time: {current_time}<br/><br/>
-
-        <b>2. Weather Information</b><br/>
-        Rainfall (6hr): {round(rainfall,2)} mm<br/>
-        Temperature: {temperature} °C<br/>
-        Wind Speed: {windspeed} km/h<br/><br/>
-
-        <b>3. Risk Assessment</b><br/>
-        Flood Risk: {flood_risk}<br/>
-        Earthquake Risk: {earthquake_risk}<br/>
-        Volcano Risk: {volcano_risk}<br/><br/>
-
-        <b>4. Predictions</b><br/>
-        Flood Prediction: {flood_prediction}<br/>
-        Earthquake Prediction: {earthquake_prediction}<br/>
-        Volcano Prediction: {volcano_prediction}<br/><br/>
-        """
-       
-
-        # STEP 2: Add action text
-        if flood_risk == "HIGH":
-            report += "Immediate evacuation required."
-        elif flood_risk == "MEDIUM":
-            report += "Stay alert and monitor conditions."
-        else:
-            report += "No immediate risk.<br/>"
-
-        report += "<b>5. Suggested Action</b><br/>"
-
-        # Priority: Earthquake > Flood
-        if earthquake_risk == "HIGH":
-            report += " High earthquake risk. Move to open safe areas immediately.<br/>"
-        elif earthquake_risk == "MEDIUM":
-            report += "Moderate earthquake activity. Stay alert and avoid unsafe structures.<br/>"
-
-        elif flood_risk == "HIGH":
-            report += " High flood risk. Evacuate low-lying areas.<br/>"
-        elif flood_risk == "MEDIUM":
-            report += " Moderate flood risk. Stay alert.<br/>"
-
-        elif flood_risk == "LOW":
-            report += "ℹ Low flood risk. Stay cautious.<br/>"
-
-        else:
-            report += "No immediate disaster risk. Safe conditions.<br/>"
-
-        report += "<br/><b>6. Trigger Source</b><br/>"
-
-        if earthquake_risk in ["HIGH", "MEDIUM"]:
-            report += "Earthquake Activity"
-        elif flood_risk == "HIGH":
-            report += "Flood Risk"
-        else:
-            report += "No Threat"
-
-        # STEP 3: Add hospitals safely
-        
-
-        if 'hospitals' in locals() and hospitals:
-            report += "\n\n🏥 Nearby Hospitals:\n"
-            for h in hospitals[:3]:
-                name = h.get("tags", {}).get("name:en") or h.get("tags", {}).get("name", "Unnamed")
-                report += f"- {name}\n"
-            else:
-                report += "No data available\n"
-        # STEP 4: Display report
-        
-
-
-        # st.text_area("Report Summary", report, height=300)
-
-        # SAFETY: make sure variables exist
-        try:
-            pdf = create_pdf(report, rain_data, temp_data, hospitals)
-        except:
-            pdf = create_pdf(report)
-
-        st.download_button(
-            label="📄 Download PDF Report",
-            data=pdf,
-            file_name="disaster_report.pdf",
-            mime="application/pdf"
+            country_color[country] = [0, 255, 0, 100]
+    return country_color
+
+
+def generate_ambulance_data(hospitals):
+    ambulance_data = []
+    for h in hospitals[:3]:
+        name = h.get("name", "Hospital")
+        total = random.randint(2, 10)
+        dispatched = random.randint(1, total)
+        ambulance_data.append({"name": name, "total": total, "dispatched": dispatched})
+    return ambulance_data
+
+
+# =========================================================
+#  EMERGENCY RESOURCE SIMULATION ENGINE
+#
+#  Purpose: when live OpenStreetMap coverage for a resource
+#  category is sparse or unavailable (common in rural areas),
+#  fill the dashboard with realistic, dynamically-varying
+#  estimates so the Emergency Response tab isn't empty.
+#
+#  Honesty note: every resource carries a "source" field —
+#  "live" (from OpenStreetMap) or "estimated" (modeled). This
+#  is surfaced in the UI as a small badge. For a disaster-response
+#  tool, silently presenting modeled bed counts / ambulance
+#  dispatch status as verified real-time data would risk real
+#  harm if anyone relied on it during an actual emergency, so
+#  the distinction is kept cheap to see but not intrusive.
+# =========================================================
+
+CATEGORY_LABELS = {
+    "hospital": "Hospital",
+    "clinic": "Clinic",
+    "shelter": "Relief Shelter",
+    "ambulance_station": "Ambulance Station",
+    "food_distribution_center": "Food Distribution Center",
+    "police_station": "Police Station",
+    "fire_station": "Fire Station",
+    "blood_bank": "Blood Bank",
+    "ngo": "NGO / Aid Organization",
+    "rescue_team": "Rescue Team",
+    "community_kitchen": "Community Kitchen",
+}
+
+NAME_POOLS = {
+    "hospital": [
+        "{district} General Hospital", "{district} District Hospital",
+        "{district} Community Health Center", "St. Mary's Medical Center",
+    ],
+    "clinic": [
+        "{district} Primary Health Clinic", "{district} Urgent Care Clinic",
+        "Neighborhood Medical Clinic",
+    ],
+    "shelter": [
+        "{district} Relief Shelter", "{district} Evacuation Center",
+        "Hope Community Shelter",
+    ],
+    "ambulance_station": [
+        "{district} Ambulance Station", "Rapid Response EMS Post",
+        "{district} Emergency Medical Services Station",
+    ],
+    "food_distribution_center": [
+        "{district} Food Distribution Center", "Community Relief Supply Point",
+        "{district} Ration Distribution Hub",
+    ],
+    "police_station": ["{district} Police Station", "{district} Central Police Post"],
+    "fire_station": ["{district} Fire Station", "{district} Fire & Rescue Department"],
+    "blood_bank": [
+        "{district} Blood Bank", "Regional Blood Bank",
+        "Red Cross Blood Center - {district}",
+    ],
+    "ngo": [
+        "{district} Disaster Relief Volunteers", "Global Aid Response Network",
+        "Humanitarian Aid Group - {district} Chapter",
+    ],
+    "rescue_team": [
+        "{district} Search & Rescue Team", "Rapid Rescue Response Squad",
+        "National Disaster Rescue Force - Local Unit",
+    ],
+    "community_kitchen": [
+        "{district} Community Kitchen", "Free Meal Relief Kitchen",
+        "{district} Community Meal Center",
+    ],
+}
+
+MAX_SCATTER_RADIUS_KM = {
+    "hospital": 15, "clinic": 10, "shelter": 12, "ambulance_station": 10,
+    "food_distribution_center": 10, "police_station": 8, "fire_station": 8,
+    "blood_bank": 15, "ngo": 15, "rescue_team": 12, "community_kitchen": 8,
+}
+
+STATUS_OPTIONS = ["Operational", "Limited Capacity", "Overwhelmed"]
+
+SEVERITY_PROFILES = {
+    "HIGH":   {"count_range": (6, 10), "occupancy_range": (65, 98), "status_weights": [0.15, 0.40, 0.45]},
+    "MEDIUM": {"count_range": (4, 7),  "occupancy_range": (40, 75), "status_weights": [0.45, 0.40, 0.15]},
+    "LOW":    {"count_range": (2, 4),  "occupancy_range": (15, 50), "status_weights": [0.80, 0.18, 0.02]},
+}
+
+
+def get_severity_profile(severity):
+    return SEVERITY_PROFILES.get(severity, SEVERITY_PROFILES["LOW"])
+
+
+def estimate_travel_time_min(distance_km, category):
+    speed_kmh = 45 if category in ("ambulance_station", "hospital") else 30
+    base_minutes = (distance_km / speed_kmh) * 60
+    return max(1, round(base_minutes + random.uniform(-2, 5)))
+
+
+def simulate_capacity_metrics(category, severity):
+    """Generates plausible operational metrics for a resource. These are
+    always model estimates (there is no public real-time feed for hospital
+    bed occupancy, ambulance fleet status, etc.), so they are labeled as
+    such in the UI regardless of whether the resource itself is live or
+    simulated."""
+    profile = get_severity_profile(severity)
+    occ_lo, occ_hi = profile["occupancy_range"]
+    occupancy_pct = random.randint(occ_lo, occ_hi)
+    status = random.choices(STATUS_OPTIONS, weights=profile["status_weights"], k=1)[0]
+
+    metrics = {
+        "occupancy_pct": occupancy_pct,
+        "status": status,
+        "last_updated": datetime.datetime.now().strftime("%I:%M %p"),
+    }
+
+    if category in ("hospital", "clinic"):
+        capacity = random.randint(40, 300)
+        icu_beds = random.randint(4, max(5, capacity // 12))
+        metrics.update({
+            "capacity": capacity,
+            "beds_available": max(0, round(capacity * (100 - occupancy_pct) / 100)),
+            "icu_beds": icu_beds,
+            "icu_available": max(0, round(icu_beds * (100 - min(occupancy_pct + 15, 100)) / 100)),
+            "ambulances": random.randint(1, 8),
+            "doctors_on_duty": random.randint(4, 45),
+        })
+    elif category == "ambulance_station":
+        fleet = random.randint(3, 15)
+        dispatched = round(fleet * occupancy_pct / 100)
+        metrics.update({
+            "fleet_size": fleet,
+            "ambulances_available": max(0, fleet - dispatched),
+            "ambulances_dispatched": dispatched,
+        })
+    elif category in ("shelter", "food_distribution_center", "community_kitchen"):
+        capacity = random.randint(80, 2500)
+        metrics.update({
+            "capacity": capacity,
+            "current_occupants": round(capacity * occupancy_pct / 100),
+        })
+    elif category in ("police_station", "fire_station"):
+        personnel = random.randint(6, 45)
+        metrics.update({
+            "personnel": personnel,
+            "deployed": round(personnel * occupancy_pct / 100),
+            "vehicles": random.randint(2, 10),
+        })
+    elif category == "blood_bank":
+        metrics.update({"blood_units_available": random.randint(50, 1500)})
+    elif category in ("ngo", "rescue_team"):
+        volunteers = random.randint(5, 60)
+        metrics.update({
+            "volunteers": volunteers,
+            "deployed": round(volunteers * occupancy_pct / 100),
+        })
+
+    return metrics
+
+
+def _scatter_point(lat, lon, max_radius_km):
+    """Random point within max_radius_km of (lat, lon), roughly uniform."""
+    angle = random.uniform(0, 2 * pi)
+    radius_km = random.uniform(1, max_radius_km)
+    d_lat = (radius_km / 111.0) * cos(angle)
+    lon_scale = cos(radians(lat)) or 1e-6
+    d_lon = (radius_km / (111.0 * lon_scale)) * sin(angle)
+    return lat + d_lat, lon + d_lon
+
+
+def _pick_simulated_name(category, district, index):
+    template = random.choice(NAME_POOLS.get(category, ["{district} Emergency Resource"]))
+    name = template.format(district=district or "Local")
+    return f"{name} ({index})" if index > 1 else name
+
+
+def generate_simulated_resource(category, lat, lon, district, severity, index):
+    max_radius = MAX_SCATTER_RADIUS_KM.get(category, 12)
+    r_lat, r_lon = _scatter_point(lat, lon, max_radius)
+    distance_km = round(haversine_km(lat, lon, r_lat, r_lon), 1)
+
+    resource = {
+        "name": _pick_simulated_name(category, district, index),
+        "type": CATEGORY_LABELS.get(category, category.replace("_", " ").title()),
+        "address": f"Near {district or 'the analyzed location'} (exact address not mapped)",
+        "contact": None,
+        "lat": r_lat,
+        "lon": r_lon,
+        "distance_km": distance_km,
+        "travel_time_min": estimate_travel_time_min(distance_km, category),
+        "source": "estimated",
+    }
+    resource.update(simulate_capacity_metrics(category, severity))
+    return resource
+
+
+def attach_estimated_metrics(items, category, severity):
+    """Adds operational metrics (beds, occupancy, status, etc.) to items
+    that don't already have them — used for live OSM results, which only
+    carry identity/location data."""
+    for item in items:
+        item.setdefault("source", "live")
+        if "occupancy_pct" not in item:
+            item.update(simulate_capacity_metrics(category, severity))
+        if "travel_time_min" not in item:
+            item["travel_time_min"] = estimate_travel_time_min(item["distance_km"], category)
+    return items
+
+
+def augment_with_simulated(live_items, category, lat, lon, district, severity, min_count=None):
+    """Pads a live-results list up to a severity-appropriate count with
+    clearly-labeled simulated resources, so the dashboard stays populated
+    even where OpenStreetMap coverage is thin."""
+    profile = get_severity_profile(severity)
+    if min_count is None:
+        min_count = random.randint(*profile["count_range"])
+
+    combined = list(live_items)
+    index = 1
+    while len(combined) < min_count:
+        combined.append(generate_simulated_resource(category, lat, lon, district, severity, index))
+        index += 1
+
+    combined.sort(key=lambda r: r["distance_km"])
+    return combined
+
+
+def get_civic_resource(lat, lon, category, radius_m=20000):
+    """Returns (items, error_message) for police/fire/blood bank/ambulance
+    station categories, sourced from the shared single-request live
+    fetch (see fetch_all_live_resources) — no separate network call."""
+    buckets, error = fetch_all_live_resources(lat, lon)
+    return buckets.get(category, []), error
+
+
+# =========================================================
+#  PDF + AUDIO REPORT GENERATION
+# =========================================================
+# =========================================================
+#  SHARED REPORT CONTENT (single source of truth)
+#
+#  Both the PDF and the audio report are built directly from the same
+#  `analysis` dict that feeds the dashboard — never from each other's
+#  output or from re-derived text — so all three surfaces can never
+#  show mismatched numbers. Recommendation/conclusion text is generated
+#  once here and reused by both.
+# =========================================================
+PREPAREDNESS_LEVELS = {
+    "HIGH": ("Level 3 - Critical", "Immediate action required. Activate full emergency response protocols and follow evacuation guidance without delay."),
+    "MEDIUM": ("Level 2 - Elevated", "Heightened readiness advised. Monitor conditions closely and prepare contingency plans."),
+    "LOW": ("Level 1 - Routine", "Standard monitoring is sufficient. No immediate action is required, but stay informed."),
+}
+
+
+def get_preparedness_level(analysis):
+    return PREPAREDNESS_LEVELS.get(analysis["overall_risk"], PREPAREDNESS_LEVELS["LOW"])
+
+
+def get_recommendation_bullets(analysis):
+    """Dynamic, hazard-specific recommendations — phrased around the
+    actual detected values (magnitude, rainfall, nearest hospital) rather
+    than generic boilerplate. Plain text only (no HTML/markup), since
+    this list is reused verbatim by the audio narrative."""
+    a = analysis
+    bullets = []
+
+    if a["earthquake_risk"] == "HIGH":
+        mag_note = f" (magnitude {a['best_eq'][1]})" if a["best_eq"] else ""
+        bullets.append(
+            f"High earthquake risk detected{mag_note}: move immediately to open, structurally "
+            "safe areas and avoid damaged or weakened buildings."
+        )
+    elif a["earthquake_risk"] == "MEDIUM":
+        bullets.append("Moderate earthquake activity detected: stay alert for aftershocks and avoid unsafe or older structures.")
+
+    if a["flood_risk"] == "HIGH":
+        bullets.append(
+            f"High flood risk detected ({round(a['rainfall'], 1)} mm rainfall in the last 6 hours): "
+            "evacuate low-lying areas immediately and move to higher ground."
+        )
+    elif a["flood_risk"] == "MEDIUM":
+        bullets.append("Moderate flood risk detected: monitor rising water levels closely and prepare an evacuation plan.")
+    elif a["flood_risk"] == "LOW":
+        bullets.append("Low flood risk detected: remain cautious of localized flooding, especially in low-lying zones.")
+
+    if a["volcano_risk"] == "HIGH":
+        bullets.append("Volcanic activity detected nearby: follow official evacuation orders and avoid ashfall exposure.")
+
+    risk_driven_count = len(bullets)
+
+    if a["mas_active"]:
+        if a["hospitals"]:
+            nearest = a["hospitals"][0]
+            bullets.append(
+                f"Nearest hospital identified: {nearest['name']} ({nearest['distance_km']} km away) — "
+                "keep this location on hand."
+            )
+        bullets.append(
+            f"Follow the recommended safe evacuation route, proceeding via: "
+            f"{', then '.join(a['safe_path'])}."
         )
 
+    bullets.append("Stay tuned to official government and disaster management channels for updates.")
+    bullets.append("Keep an emergency kit ready with essential supplies, water, and medication.")
 
-        from io import BytesIO
-        import re
+    if risk_driven_count == 0 and not a["mas_active"]:
+        bullets.insert(0, "No immediate action is required. Continue normal activities while staying informed.")
 
-        # Create a text-only version for TTS (remove emojis)
-        # Remove non-ASCII characters (emojis)
-        import re
+    return bullets
 
-        # Remove HTML tags
-        clean_text = re.sub(r'<.*?>', '', report)
 
-        # Remove emojis / special chars
-        clean_text = re.sub(r'[^\x00-\x7F]+', '', clean_text)
+def get_conclusion_text(analysis):
+    a = analysis
+    level_label, level_desc = get_preparedness_level(a)
+    mobilization = (
+        "Emergency response resources have been identified and are detailed in this report."
+        if a["mas_active"] else
+        "No emergency mobilization is currently required."
+    )
+    return (
+        f"Overall, {a['district']} is currently assessed at {a['overall_risk']} disaster risk, "
+        f"corresponding to a preparedness level of {level_label}. {level_desc} {mobilization} "
+        "Continued monitoring is advised as conditions may change. Stay safe and prepared."
+    )
 
-        tts_text = clean_text.strip()
-        tts_text = tts_text.strip()
 
-        try:
-            tts = gTTS(tts_text)
-            mp3_buf = BytesIO()
-            tts.write_to_fp(mp3_buf)
-            mp3_buf.seek(0)
-            audio_data = mp3_buf.read()
-            # Check if it starts with MP3 header
-            if audio_data.startswith(b'\xff\xfb') or audio_data.startswith(b'\xff\xf3') or audio_data.startswith(b'\xff\xf2'):
-                log_info("Audio data appears to be valid MP3")
-            else:
-                log_info("Audio data may not be valid MP3")
-            
-            # Save to file for debugging
-            with open("debug_audio.mp3", "wb") as f:
-                f.write(audio_data)
-            # log_info("Audio saved to debug_audio.mp3")
-            
-            # Play audio with correct MIME type
-            st.audio(audio_data, format="audio/mpeg")
-            
-            # log_info("Audio played successfully")
-            
-            # Also provide download button
-            st.download_button(
-                label="🎵 Download Audio Report",
-                data=audio_data,
-                file_name="disaster_audio_report.mp3",
-                mime="audio/mpeg"
+def get_executive_summary(analysis):
+    a = analysis
+    if a["mas_active"]:
+        activation = (
+            f"The emergency response system has been activated, identifying {len(a['hospitals'])} "
+            f"hospitals, {len(a['shelters'])} shelters, and {len(a['food_places'])} food and relief "
+            "resources nearby."
+        )
+    else:
+        activation = "Risk levels are currently low and the emergency response system remains on standby."
+    return (
+        f"This report presents a real-time disaster risk analysis for {a['district']}, {a['state']}, "
+        f"{a['country']}. Based on current weather, seismic, and volcanic data, the overall disaster "
+        f"risk is assessed as {a['overall_risk']}. {activation}"
+    )
+
+
+def build_audio_narrative(analysis):
+    """Natural-language narrative built directly from the shared analysis
+    dict — the same numbers shown on the dashboard and in the PDF,
+    phrased as sentences rather than read out as raw labels/values."""
+    a = analysis
+    sentences = [
+        f"This is the disaster analysis report for {a['district']}, {a['state']}, {a['country']}, "
+        f"generated on {a['current_date']} at {a['current_time']}.",
+        f"The location lies in the {a['zone']}, an area typically prone to {', '.join(a['disasters'])}.",
+        f"Current weather conditions show a temperature of {a['temperature']} degrees Celsius, "
+        f"wind speeds of {a['windspeed']} kilometers per hour, and rainfall of "
+        f"{round(a['rainfall'], 1)} millimeters over the past six hours.",
+        f"The flood risk for this location is assessed as {a['flood_risk'].lower()}, "
+        f"with a flood prediction of {a['flood_prediction'].lower()}.",
+    ]
+
+    if a["best_eq"]:
+        place_name, magnitude = a["best_eq"]
+        sentences.append(
+            f"The nearest recorded earthquake occurred near {place_name} with a magnitude of "
+            f"{magnitude}, placing the earthquake risk at {a['earthquake_risk'].lower()}."
+        )
+    else:
+        sentences.append("No significant recent earthquake activity was detected nearby.")
+
+    if a["nearby_volcanoes"]:
+        sentences.append(f"Volcanic activity was detected nearby, placing the volcano risk at {a['volcano_risk'].lower()}.")
+    else:
+        sentences.append("No volcanic activity was detected in the surrounding region.")
+
+    sentences.append(
+        f"Combining these factors, the overall disaster risk for this location is classified as "
+        f"{a['overall_risk'].lower()}."
+    )
+
+    if a["mas_active"]:
+        sentences.append(
+            f"The emergency response system has been activated. {len(a['hospitals'])} hospitals and "
+            f"medical facilities, {len(a['shelters'])} shelters, and {len(a['food_places'])} food and "
+            f"relief resources were identified within the response radius."
+        )
+        if a["hospitals"]:
+            nearest = a["hospitals"][0]
+            sentences.append(
+                f"The nearest hospital is {nearest['name']}, approximately {nearest['distance_km']} kilometers away."
             )
-        except Exception as e:
-            log_error(f"Error generating or playing audio: {str(e)}", exc=e)
+        sentences.append(
+            "Ambulance stations, police, fire services, blood banks, and coordination with local "
+            "non-governmental organizations and rescue teams have also been factored into the response plan."
+        )
+    else:
+        sentences.append("Risk levels are currently low, so the emergency response system remains on standby.")
+
+    sentences.extend(get_recommendation_bullets(a))
+    sentences.append(get_conclusion_text(a))
+
+    return " ".join(sentences)
+
+
+def _sanitize_for_speech(text):
+    """Defensive cleanup in case any HTML/markdown artifacts slip into
+    generated text before it reaches the TTS engine."""
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[*_#>`]+", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+# =========================================================
+#  PDF REPORT
+# =========================================================
+RISK_COLOR_MAP = {
+    "HIGH": colors.HexColor("#c0392b"),
+    "MEDIUM": colors.HexColor("#f1c40f"),
+    "LOW": colors.HexColor("#27ae60"),
+    "NONE": colors.HexColor("#27ae60"),
+    "NO FLOOD RISK": colors.HexColor("#27ae60"),
+}
+RISK_TEXT_COLOR_MAP = {
+    "HIGH": colors.white,
+    "MEDIUM": colors.HexColor("#4a3b00"),
+    "LOW": colors.white,
+    "NONE": colors.white,
+    "NO FLOOD RISK": colors.white,
+}
+BRAND_NAVY = colors.HexColor("#1a3c6e")
+
+# Table cells must use Paragraph objects to get word-wrapping — raw
+# strings in a reportlab Table are drawn as a single line and will
+# overflow into neighboring columns if they're longer than the column
+# width (this was the cause of the overlapping-text bug in the resource
+# table). These are defined once at module level so any helper can wrap
+# cell text without needing the full stylesheet threaded through.
+TABLE_HEADER_STYLE = ParagraphStyle(
+    name="TableHeaderCell", fontName="Helvetica-Bold", fontSize=8.5,
+    leading=10, textColor=colors.white,
+)
+TABLE_BODY_STYLE = ParagraphStyle(
+    name="TableBodyCell", fontName="Helvetica", fontSize=8,
+    leading=10, textColor=colors.HexColor("#1a1a1a"),
+)
+TABLE_HEADER_STYLE_CENTER = ParagraphStyle(name="TableHeaderCellCenter", parent=TABLE_HEADER_STYLE, alignment=TA_CENTER)
+TABLE_BODY_STYLE_CENTER = ParagraphStyle(name="TableBodyCellCenter", parent=TABLE_BODY_STYLE, alignment=TA_CENTER)
+
+
+def _table_cell_style(is_header, align):
+    if is_header:
+        return TABLE_HEADER_STYLE_CENTER if align == "CENTER" else TABLE_HEADER_STYLE
+    return TABLE_BODY_STYLE_CENTER if align == "CENTER" else TABLE_BODY_STYLE
+
+
+def _esc(value):
+    """Escapes &, <, > so resource names/addresses containing them (e.g.
+    'St. Mary's Hospital & Trauma Center') don't break Paragraph's XML
+    parsing or silently mis-render."""
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _risk_color(level):
+    return RISK_COLOR_MAP.get(level, colors.grey)
+
+
+def _risk_text_color(level):
+    return RISK_TEXT_COLOR_MAP.get(level, colors.white)
+
+
+def _pdf_styles():
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Title"], fontSize=26, textColor=BRAND_NAVY, spaceAfter=4))
+    styles.add(ParagraphStyle(name="ReportSubtitle", parent=styles["Normal"], fontSize=13, alignment=TA_CENTER, textColor=colors.HexColor("#555555"), spaceAfter=4))
+    styles.add(ParagraphStyle(name="SectionHeading", parent=styles["Heading2"], textColor=BRAND_NAVY, spaceBefore=10, spaceAfter=5))
+    styles.add(ParagraphStyle(name="SmallGray", parent=styles["Normal"], fontSize=8, textColor=colors.grey))
+    styles.add(ParagraphStyle(name="TightNormal", parent=styles["Normal"], spaceAfter=2))
+    return styles
+
+
+def _build_logo_drawing(size=64):
+    """Vector-drawn badge logo (no external image file / dependency)."""
+    d = Drawing(size, size)
+    d.add(Circle(size / 2, size / 2, size / 2 - 2, fillColor=BRAND_NAVY, strokeColor=colors.HexColor("#0d1f3c"), strokeWidth=1.5))
+    d.add(String(size / 2, size / 2 - 7, "DC", fontName="Helvetica-Bold", fontSize=size * 0.32, fillColor=colors.white, textAnchor="middle"))
+    d.hAlign = "CENTER"
+    return d
+
+
+def _pdf_table(data, col_widths=None, header=True, zebra=True, col_align=None, repeat_header=False):
+    """Reusable table styling: bordered, header band, optional zebra
+    striping, optional per-column alignment (list matching column count).
+    All cell content is wrapped in Paragraph objects so long text wraps
+    within its column (and grows the row height) instead of overflowing
+    into neighboring columns. repeat_header=True reprints the header row
+    on every page a long table spans."""
+    n_cols = len(data[0]) if data else 0
+    align_list = col_align or ["LEFT"] * n_cols
+
+    wrapped_data = []
+    for r_idx, row in enumerate(data):
+        is_header = header and r_idx == 0
+        wrapped_row = []
+        for c_idx, cell in enumerate(row):
+            align = align_list[c_idx] if c_idx < len(align_list) else "LEFT"
+            style = _table_cell_style(is_header, align)
+            wrapped_row.append(Paragraph(_esc(cell), style))
+        wrapped_data.append(wrapped_row)
+
+    table = Table(
+        wrapped_data, colWidths=col_widths, hAlign="LEFT",
+        repeatRows=1 if (repeat_header and header) else 0,
+    )
+    style = [
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]
+    if header:
+        style.append(("BACKGROUND", (0, 0), (-1, 0), BRAND_NAVY))
+    if zebra and len(data) > 2:
+        style.append(("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4f6fa")]))
+    table.setStyle(TableStyle(style))
+    return table
+
+
+def _kpi_card(label, value, accent):
+    inner = Table(
+        [[Paragraph(f'<font size=7 color="#666666">{label}</font>')],
+         [Paragraph(f'<font size=15 color="#1a1a1a"><b>{value}</b></font>')]],
+        colWidths=[3.1 * cm],
+    )
+    inner.setStyle(TableStyle([
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("LINEABOVE", (0, 0), (-1, 0), 3, accent),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fafafa")),
+    ]))
+    return inner
+
+
+def _build_kpi_row(a):
+    risk_col = _risk_color(a["overall_risk"])
+    cards = [
+        _kpi_card("TEMPERATURE", f"{a['temperature']}\u00b0C", BRAND_NAVY),
+        _kpi_card("RAINFALL (6H)", f"{round(a['rainfall'], 1)} mm", BRAND_NAVY),
+        _kpi_card("WIND SPEED", f"{a['windspeed']} km/h", BRAND_NAVY),
+        _kpi_card("OVERALL RISK", a["overall_risk"], risk_col),
+        _kpi_card("RISK SCORE", f"{round(a['risk_score'], 1)}", risk_col),
+    ]
+    row = Table([cards], colWidths=[3.3 * cm] * 5, hAlign="LEFT")
+    row.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return row
+
+
+def _build_risk_table(a):
+    rows = [
+        ["Hazard", "Current Risk", "Prediction"],
+        ["Flood", a["flood_risk"], a["flood_prediction"]],
+        ["Earthquake", a["earthquake_risk"], a["earthquake_prediction"]],
+        ["Volcano", a["volcano_risk"], a["volcano_prediction"]],
+    ]
+    table = Table(rows, colWidths=[5 * cm, 4.5 * cm, 4.5 * cm], hAlign="LEFT")
+    style_cmds = [
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("BACKGROUND", (0, 0), (-1, 0), BRAND_NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ]
+    for row_idx, cur_key, pred_key in [(1, "flood_risk", "flood_prediction"),
+                                        (2, "earthquake_risk", "earthquake_prediction"),
+                                        (3, "volcano_risk", "volcano_prediction")]:
+        for col_idx, key in [(1, cur_key), (2, pred_key)]:
+            level = a[key]
+            style_cmds.append(("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx), _risk_color(level)))
+            style_cmds.append(("TEXTCOLOR", (col_idx, row_idx), (col_idx, row_idx), _risk_text_color(level)))
+            style_cmds.append(("FONTNAME", (col_idx, row_idx), (col_idx, row_idx), "Helvetica-Bold"))
+    table.setStyle(TableStyle(style_cmds))
+    return table
+
+
+def _capacity_summary(r):
+    if "beds_available" in r:
+        return f"{r['beds_available']}/{r['capacity']} beds"
+    if "fleet_size" in r:
+        return f"{r['ambulances_available']}/{r['fleet_size']} ambulances"
+    if "current_occupants" in r:
+        return f"{max(0, r['capacity'] - r['current_occupants'])}/{r['capacity']} free"
+    if "personnel" in r:
+        return f"{max(0, r['personnel'] - r['deployed'])}/{r['personnel']} available"
+    if "blood_units_available" in r:
+        return f"{r['blood_units_available']} units"
+    if "volunteers" in r:
+        return f"{max(0, r['volunteers'] - r['deployed'])}/{r['volunteers']} available"
+    return "-"
+
+
+def _build_resource_detail_table(a):
+    groups = [
+        ("Hospital", a["hospitals"], 5),
+        ("Shelter", a["shelters"], 3),
+        ("Food/Relief", a["food_places"], 3),
+        ("Ambulance Stn.", a["ambulance_stations"], 3),
+        ("Police", a["police_stations"], 3),
+        ("Fire", a["fire_stations"], 3),
+        ("Blood Bank", a["blood_banks"], 3),
+        ("NGO", a["ngos"], 3),
+        ("Rescue Team", a["rescue_teams"], 3),
+        ("Kitchen", a["community_kitchens"], 3),
+    ]
+    rows = [["Category", "Name", "Dist (km)", "ETA (min)", "Availability", "Load %", "Status", "Src"]]
+    for label, items, top_n in groups:
+        for r in items[:top_n]:
+            rows.append([
+                label, r["name"], f"{r['distance_km']}", f"{r.get('travel_time_min', '-')}",
+                _capacity_summary(r), f"{r.get('occupancy_pct', '-')}", r.get("status", "-"),
+                "Live" if r.get("source") == "live" else "Est.",
+            ])
+    return _pdf_table(
+        rows,
+        col_widths=[2.0 * cm, 4.1 * cm, 1.3 * cm, 1.3 * cm, 2.5 * cm, 1.1 * cm, 2.5 * cm, 1.0 * cm],
+        col_align=["LEFT", "LEFT", "CENTER", "CENTER", "LEFT", "CENTER", "LEFT", "CENTER"],
+        repeat_header=True,
+    )
+
+
+def _build_location_map_png(analysis, path="location_map.png"):
+    """Self-contained (no external map tiles / API) location + resource
+    map: distance-ring plot centered on the analyzed coordinates, with
+    the disaster location marked and nearby resources overlaid by
+    category. Doubles as the 'location map with disaster marker' and
+    the emergency-resources overview."""
+    from matplotlib.patches import Circle as RangeCircle
+
+    a = analysis
+    lat0, lon0 = a["lat"], a["lon"]
+
+    groups = [
+        ("Hospitals", a.get("hospitals", []), "#c0392b", "o"),
+        ("Shelters", a.get("shelters", []), "#9b59b6", "s"),
+        ("Food/Relief", a.get("food_places", []), "#e67e22", "^"),
+        ("Ambulance Stns.", a.get("ambulance_stations", []), "#16a085", "P"),
+        ("Police", a.get("police_stations", []), "#2980b9", "X"),
+        ("Fire", a.get("fire_stations", []), "#d35400", "*"),
+        ("Blood Banks", a.get("blood_banks", []), "#e91e63", "D"),
+        ("NGOs", a.get("ngos", []), "#27ae60", "v"),
+        ("Rescue Teams", a.get("rescue_teams", []), "#1abc9c", "v"),
+        ("Kitchens", a.get("community_kitchens", []), "#f1c40f", "p"),
+    ]
+
+    fig, ax = plt.subplots(figsize=(6.3, 6))
+
+    for radius_km, style in [(5, ":"), (10, "--"), (20, "-")]:
+        ax.add_patch(RangeCircle((0, 0), radius_km, fill=False, linestyle=style, edgecolor="#bbbbbb", linewidth=1, zorder=1))
+        ax.text(0, radius_km + 0.4, f"{radius_km} km", fontsize=7, color="#999999", ha="center")
+
+    for label, items, color, marker in groups:
+        if not items:
+            continue
+        xs, ys = [], []
+        for r in items[:5]:
+            dx = (r["lon"] - lon0) * 111.0 * cos(radians(lat0))
+            dy = (r["lat"] - lat0) * 111.0
+            xs.append(dx)
+            ys.append(dy)
+        ax.scatter(xs, ys, c=color, marker=marker, s=45, label=label, edgecolors="white", linewidths=0.5, zorder=3)
+
+    ax.scatter([0], [0], c="#1a1a1a", marker="*", s=260, zorder=5, edgecolors="white", linewidths=1)
+    ax.annotate("Disaster Location", (0, 0), textcoords="offset points", xytext=(8, 8), fontsize=9, fontweight="bold")
+
+    extent = 22
+    ax.set_xlim(-extent, extent)
+    ax.set_ylim(-extent, extent)
+    ax.set_aspect("equal")
+    ax.set_xlabel("East-West Distance (km)")
+    ax.set_ylabel("North-South Distance (km)")
+    ax.set_title(f"Location & Nearby Emergency Resources — {a['district']}")
+    if any(items for _, items, _, _ in groups):
+        ax.legend(loc="upper left", fontsize=6.5, framealpha=0.9, ncol=2)
+    ax.grid(alpha=0.15)
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def _hyperlink(url, label, styles):
+    return Paragraph(f'<link href="{url}" color="#1a73e8"><u>{label}</u></link>', styles["Normal"])
+
+
+def _pdf_footer(canvas, doc_):
+    canvas.saveState()
+    canvas.setStrokeColor(colors.HexColor("#dddddd"))
+    canvas.setLineWidth(0.5)
+    canvas.line(2 * cm, 1.35 * cm, A4[0] - 2 * cm, 1.35 * cm)
+    canvas.setFont("Helvetica", 7.5)
+    canvas.setFillColor(colors.grey)
+    canvas.drawString(2 * cm, 1 * cm, "Generated by Disaster Copilot AI")
+    canvas.drawCentredString(A4[0] / 2, 1 * cm, datetime.datetime.now().strftime("%d %b %Y, %I:%M %p"))
+    canvas.drawRightString(A4[0] - 2 * cm, 1 * cm, f"Page {doc_.page}")
+    canvas.restoreState()
+
+
+def create_pdf(analysis):
+    """Builds the full PDF report directly from the shared analysis
+    dict — every figure here is read from the same data structure the
+    dashboard renders from, so values can't drift out of sync."""
+    a = analysis
+    styles = _pdf_styles()
+    doc = SimpleDocTemplate(
+        "report.pdf", pagesize=A4,
+        topMargin=1.4 * cm, bottomMargin=1.6 * cm, leftMargin=2 * cm, rightMargin=2 * cm,
+    )
+    content = []
+
+    # ---------- Cover page ----------
+    content.append(Spacer(1, 20))
+    content.append(_build_logo_drawing())
+    content.append(Spacer(1, 8))
+    content.append(Paragraph("DISASTER COPILOT", styles["ReportTitle"]))
+    content.append(Paragraph("Disaster Analysis &amp; Emergency Response Report", styles["ReportSubtitle"]))
+    content.append(Spacer(1, 16))
+
+    risk_banner = Table([[f"OVERALL RISK LEVEL: {a['overall_risk']}"]], colWidths=[14 * cm])
+    risk_banner.hAlign = "CENTER"
+    risk_banner.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), _risk_color(a["overall_risk"])),
+        ("TEXTCOLOR", (0, 0), (-1, -1), _risk_text_color(a["overall_risk"])),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, -1), 14),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    content.append(risk_banner)
+    content.append(Spacer(1, 18))
+
+    cover_info = _pdf_table([
+        ["Location", f"{a['district']}, {a['state']}, {a['country']}"],
+        ["Coordinates", f"{a['lat']}, {a['lon']}"],
+        ["Report Date", a["current_date"]],
+        ["Report Time", a["current_time"]],
+    ], col_widths=[4 * cm, 10 * cm], header=False, zebra=False)
+    cover_info.hAlign = "CENTER"
+    content.append(cover_info)
+    content.append(Spacer(1, 16))
+
+    content.append(Paragraph("Executive Summary", styles["SectionHeading"]))
+    content.append(Paragraph(get_executive_summary(a), styles["Normal"]))
+    content.append(Spacer(1, 10))
+    content.append(HRFlowable(width="100%", thickness=0.75, color=colors.HexColor("#dddddd")))
+    content.append(Spacer(1, 4))
+    content.append(Paragraph(
+        "Generated by Disaster Copilot, a predictive multi-agent early-warning and emergency "
+        "response system combining live environmental data with modeled emergency-resource estimates.",
+        styles["SmallGray"],
+    ))
+    content.append(PageBreak())
+
+    # ---------- Key Metrics (KPI cards) ----------
+    content.append(KeepTogether([
+        Paragraph("Key Metrics", styles["SectionHeading"]),
+        _build_kpi_row(a),
+    ]))
+    content.append(Spacer(1, 10))
+
+    # ---------- 1. Location & Climatic Zone ----------
+    content.append(Paragraph("1. Location &amp; Climatic Zone", styles["SectionHeading"]))
+    content.append(_pdf_table([
+        ["Field", "Value"],
+        ["District", a["district"]], ["State / Region", a["state"]], ["Country", a["country"]],
+        ["Coordinates", f"{a['lat']}, {a['lon']}"], ["Climatic Zone", a["zone"]],
+        ["Common Disaster Types", ", ".join(a["disasters"])],
+    ], col_widths=[5 * cm, 9 * cm]))
+    content.append(Spacer(1, 10))
+
+    # ---------- 2. Location & Resource Map ----------
+    content.append(Paragraph("2. Location Map", styles["SectionHeading"]))
+    try:
+        map_path = _build_location_map_png(a)
+        content.append(Image(map_path, width=13 * cm, height=12.4 * cm))
+    except Exception as e:
+        log_error("Location map generation failed; continuing without it.", exc=e)
+    content.append(Spacer(1, 10))
+
+    # ---------- 3. Disaster Risk Assessment & Prediction ----------
+    content.append(KeepTogether([
+        Paragraph("3. Disaster Risk Assessment &amp; Prediction", styles["SectionHeading"]),
+        _build_risk_table(a),
+        Spacer(1, 6),
+        Paragraph(f"<b>Computed Risk Score:</b> {round(a['risk_score'], 2)}", styles["Normal"]),
+    ]))
+    content.append(Spacer(1, 10))
+
+    # ---------- 4. Forecast Charts (side by side to balance page space) ----------
+    content.append(Paragraph("4. 24-Hour Forecast Charts", styles["SectionHeading"]))
+    chart_cells = []
+    if a["rain_24h"]:
+        plt.figure(figsize=(4.2, 2.6))
+        plt.plot(a["rain_24h"], color="#1a73e8")
+        plt.title("Rainfall Forecast (mm)", fontsize=9)
+        plt.xlabel("Hours", fontsize=8)
+        plt.ylabel("mm", fontsize=8)
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.savefig("rain.png", dpi=150)
+        plt.close()
+        chart_cells.append(Image("rain.png", width=7.8 * cm, height=4.8 * cm))
+    if a["temp_24h"]:
+        plt.figure(figsize=(4.2, 2.6))
+        plt.plot(a["temp_24h"], color="#e67e22")
+        plt.title("Temperature Forecast (\u00b0C)", fontsize=9)
+        plt.xlabel("Hours", fontsize=8)
+        plt.ylabel("\u00b0C", fontsize=8)
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.savefig("temp.png", dpi=150)
+        plt.close()
+        chart_cells.append(Image("temp.png", width=7.8 * cm, height=4.8 * cm))
+    if chart_cells:
+        charts_row = Table([chart_cells], colWidths=[8 * cm] * len(chart_cells))
+        charts_row.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        content.append(charts_row)
+    content.append(Spacer(1, 8))
+
+    # ---------- 5. Emergency Response ----------
+    content.append(PageBreak())
+    content.append(Paragraph("5. Emergency Response Summary", styles["SectionHeading"]))
+
+    if a["mas_active"]:
+        resource_groups = [
+            ("Hospitals & Clinics", a["hospitals"]), ("Shelters", a["shelters"]),
+            ("Food & Relief Resources", a["food_places"]), ("Ambulance Stations", a["ambulance_stations"]),
+            ("Police Stations", a["police_stations"]), ("Fire Stations", a["fire_stations"]),
+            ("Blood Banks", a["blood_banks"]), ("NGOs / Aid Organizations", a["ngos"]),
+            ("Rescue Teams", a["rescue_teams"]), ("Community Kitchens", a["community_kitchens"]),
+        ]
+        summary_rows = [["Resource Type", "Live", "Estimated", "Total"]]
+        for label, items in resource_groups:
+            live_count = sum(1 for x in items if x.get("source") == "live")
+            summary_rows.append([label, str(live_count), str(len(items) - live_count), str(len(items))])
+        content.append(_pdf_table(summary_rows, col_widths=[6 * cm, 2.5 * cm, 2.7 * cm, 2.3 * cm],
+                                   col_align=["LEFT", "CENTER", "CENTER", "CENTER"], repeat_header=True))
+        content.append(Spacer(1, 10))
+
+        content.append(Paragraph("Detailed Resource Availability", styles["Heading3"]))
+        content.append(_build_resource_detail_table(a))
+        content.append(Spacer(1, 10))
+
+        content.append(Paragraph(f"<b>Smart Safe Route:</b> {' &rarr; '.join(a['safe_path'])}", styles["Normal"]))
+        content.append(Spacer(1, 3))
+        content.append(_hyperlink(a["evacuation_url"], "Open Evacuation Route in Google Maps", styles))
+        if a["hospital_routes"]:
+            content.append(Spacer(1, 3))
+            for r in a["hospital_routes"][:3]:
+                content.append(_hyperlink(r["url"], f"Ambulance route from {r['name']}", styles))
+    else:
+        content.append(Paragraph(
+            "Risk levels are low. The emergency response system is on standby and was not "
+            "activated for this analysis.",
+            styles["Normal"],
+        ))
+    content.append(Spacer(1, 10))
+
+    # ---------- 6. Recommendations ----------
+    content.append(Paragraph("6. Recommendations", styles["SectionHeading"]))
+    bullet_items = [ListItem(Paragraph(b, styles["Normal"]), leftIndent=10) for b in get_recommendation_bullets(a)]
+    content.append(ListFlowable(bullet_items, bulletType="bullet"))
+    content.append(Spacer(1, 10))
+
+    # ---------- 7. Conclusion ----------
+    level_label, _ = get_preparedness_level(a)
+    content.append(Paragraph("7. Conclusion", styles["SectionHeading"]))
+    content.append(Paragraph(f"<b>Preparedness Level:</b> {level_label}", styles["Normal"]))
+    content.append(Spacer(1, 4))
+    content.append(Paragraph(get_conclusion_text(a), styles["Normal"]))
+    content.append(Spacer(1, 12))
+
+    content.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#dddddd")))
+    content.append(Spacer(1, 4))
+    content.append(Paragraph(
+        "Note: Where live OpenStreetMap coverage was insufficient for a resource category, this "
+        "report supplements it with clearly-marked modeled estimates (see 'Src'/'Source' columns "
+        "above) so response planning is not left with gaps.",
+        styles["SmallGray"],
+    ))
+
+    doc.build(content, onFirstPage=_pdf_footer, onLaterPages=_pdf_footer)
+
+    with open("report.pdf", "rb") as f:
+        return f.read()
+
+
+def generate_audio_report(analysis):
+    """Generates the audio report from the same narrative-building logic
+    used to check consistency with the PDF — both read from the same
+    `analysis` dict, so numbers can't diverge between the two."""
+    narrative = _sanitize_for_speech(build_audio_narrative(analysis))
+    tts = gTTS(narrative)
+    mp3_buf = BytesIO()
+    tts.write_to_fp(mp3_buf)
+    mp3_buf.seek(0)
+    return mp3_buf.read()
+
+
+# =========================================================
+#  PREDICTION ENGINE
+#
+#  Multi-factor, rule-based hazard scoring (not a trained ML model)
+#  using live forecast data, best-effort historical/terrain context,
+#  and recent seismic activity. Every hazard result includes a
+#  probability, a confidence score, plain-language reasons, an expected
+#  time window, and preventive actions, so predictions are explainable
+#  rather than a single opaque risk word.
+#
+#  Honesty notes baked into the design:
+#  - Earthquake/volcano "prediction" here means near-term likelihood of
+#    CONTINUED activity (aftershock-style clustering, loosely inspired
+#    by Omori's law, and volcanic unrest via nearby seismicity) — not a
+#    forecast of a new, independent event. No system can predict the
+#    timing of an initial earthquake or eruption; that's a limitation
+#    of seismology itself, not of this code.
+#  - Confidence scores are capped well below 100% and reduced further
+#    when optional enrichment data (historical baseline, terrain
+#    gradient) is unavailable, rather than presenting a single-source
+#    estimate as certain.
+# =========================================================
+def _hazard_result(level, probability_pct, confidence_pct, reasons, window, actions):
+    return {
+        "level": level,
+        "probability_pct": max(0, min(99, round(probability_pct))),
+        "confidence_pct": max(30, min(92, round(confidence_pct))),
+        "reasons": reasons,
+        "expected_window": window,
+        "actions": actions,
+    }
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_historical_rainfall(lat, lon):
+    """Best-effort ~30-day rainfall baseline (soil-saturation proxy) from
+    Open-Meteo's archive API. Returns None on any failure — historical
+    context is an enrichment, not a dependency; predictions still work
+    without it, just with a lower confidence score."""
+    try:
+        end = datetime.date.today() - datetime.timedelta(days=2)  # archive lags ~2 days
+        start = end - datetime.timedelta(days=30)
+        url = (
+            "https://archive-api.open-meteo.com/v1/archive"
+            f"?latitude={lat}&longitude={lon}&start_date={start}&end_date={end}"
+            "&daily=precipitation_sum&timezone=auto"
+        )
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        totals = [v for v in resp.json().get("daily", {}).get("precipitation_sum", []) if v is not None]
+        if not totals:
+            return None
+        return {"total_30d_mm": round(sum(totals), 1)}
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_elevation_profile(lat, lon):
+    """Best-effort terrain-gradient proxy for landslide risk: samples
+    elevation at the center point plus four ~1.1 km offsets and returns
+    the steepest gradient found (m of elevation change per km). Returns
+    None on failure."""
+    try:
+        offset = 0.01  # ~1.1 km at the equator
+        lats = [lat, lat + offset, lat - offset, lat, lat]
+        lons = [lon, lon, lon, lon + offset, lon - offset]
+        url = (
+            "https://api.open-meteo.com/v1/elevation"
+            f"?latitude={','.join(str(x) for x in lats)}&longitude={','.join(str(x) for x in lons)}"
+        )
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        elevations = resp.json().get("elevation", [])
+        if len(elevations) < 5 or any(e is None for e in elevations):
+            return None
+        center = elevations[0]
+        max_diff = max(abs(e - center) for e in elevations[1:])
+        return {"gradient_m_per_km": round(max_diff / 1.1, 1)}
+    except Exception:
+        return None
+
+
+def predict_flood(rain_6h_total, daily, historical):
+    daily_precip = [v for v in (daily or {}).get("precipitation_sum", []) if v is not None]
+    rain_72h = sum(daily_precip[:3])
+    reasons = [f"{round(rain_6h_total, 1)} mm of rain in the last 6 hours"]
+    if daily_precip:
+        reasons.append(f"{round(rain_72h, 1)} mm forecast over the next 3 days")
+
+    saturation_bonus = 0
+    if historical and historical.get("total_30d_mm") is not None:
+        total_30d = historical["total_30d_mm"]
+        if total_30d > 150:
+            saturation_bonus = 10
+            reasons.append(f"soil likely saturated ({total_30d} mm fell over the past 30 days)")
+
+    score = rain_6h_total * 0.5 + rain_72h * 0.35 + saturation_bonus
+
+    if score > 45:
+        level, window = "HIGH", "within 6-24 hours"
+    elif score > 22:
+        level, window = "MEDIUM", "within 24-48 hours"
+    elif score > 8:
+        level, window = "LOW", "possible within 3-5 days"
+    else:
+        level, window = "NONE", "not expected in the near term"
+        reasons = ["Rainfall levels are within a normal range"]
+
+    actions = {
+        "HIGH": ["Evacuate low-lying areas now", "Move vehicles and valuables to higher ground", "Avoid crossing flooded roads or bridges"],
+        "MEDIUM": ["Prepare an evacuation plan", "Monitor local river/drain levels closely", "Avoid unnecessary travel near waterways"],
+        "LOW": ["Stay informed via local weather updates", "Clear drains and gutters as a precaution"],
+        "NONE": ["No action needed; continue routine monitoring"],
+    }[level]
+
+    confidence = 62 + (12 if daily_precip else 0) + (10 if historical else 0)
+    return _hazard_result(level, score * 1.6, confidence, reasons, window, actions)
+
+
+def predict_landslide(daily, historical, elevation):
+    daily_precip = [v for v in (daily or {}).get("precipitation_sum", []) if v is not None]
+    rain_72h = sum(daily_precip[:3])
+    gradient = (elevation or {}).get("gradient_m_per_km")
+
+    reasons = []
+    if daily_precip:
+        reasons.append(f"{round(rain_72h, 1)} mm of rain forecast over the next 3 days")
+    if gradient is not None:
+        reasons.append(f"local terrain gradient of ~{gradient} m/km near the analyzed point")
+    else:
+        reasons.append("terrain gradient data unavailable this run")
+
+    terrain_factor = 1.0
+    if gradient is not None:
+        if gradient > 40:
+            terrain_factor = 1.6
+        elif gradient > 15:
+            terrain_factor = 1.25
+
+    score = rain_72h * terrain_factor * 0.6
+    if historical and (historical.get("total_30d_mm") or 0) > 150:
+        score *= 1.15
+        reasons.append("ground likely already saturated from recent rainfall")
+
+    if score > 55:
+        level, window = "HIGH", "within 24-48 hours if rain continues"
+    elif score > 28:
+        level, window = "MEDIUM", "within 2-4 days if rain continues"
+    elif score > 10:
+        level, window = "LOW", "low likelihood in the coming week"
+    else:
+        level, window = "NONE", "not expected in the near term"
+
+    actions = {
+        "HIGH": ["Avoid steep slopes and unstable ground immediately", "Watch for cracking soil, tilting trees, or sudden water changes", "Be ready to evacuate on short notice"],
+        "MEDIUM": ["Avoid unnecessary travel on hillside roads", "Watch for early warning signs (new cracks, leaning structures)"],
+        "LOW": ["Stay aware of local terrain conditions during heavy rain"],
+        "NONE": ["No action needed; continue routine monitoring"],
+    }[level]
+
+    confidence = 55 + (10 if daily_precip else 0) + (15 if gradient is not None else 0)
+    return _hazard_result(level, score * 1.3, confidence, reasons, window, actions)
+
+
+def predict_storm_cyclone(current_weather, hourly, daily):
+    pressure_series = [v for v in (hourly or {}).get("surface_pressure", []) if v is not None]
+    humidity_series = [v for v in (hourly or {}).get("relative_humidity_2m", []) if v is not None]
+    wind_now = (current_weather or {}).get("windspeed", 0) or 0
+    daily_wind_max = [v for v in (daily or {}).get("windspeed_10m_max", []) if v is not None]
+
+    reasons = [f"current wind speed {wind_now} km/h"]
+    pressure_now = pressure_series[0] if pressure_series else None
+    if pressure_now is not None:
+        reasons.append(f"surface pressure {round(pressure_now)} hPa")
+
+    score = wind_now * 0.5
+    if pressure_now is not None and pressure_now < 1000:
+        score += (1000 - pressure_now) * 1.2
+        reasons.append("low surface pressure consistent with storm development")
+    if humidity_series and (sum(humidity_series[:6]) / len(humidity_series[:6])) > 80:
+        score += 8
+        reasons.append("sustained high humidity")
+    if daily_wind_max:
+        forecast_peak = max(daily_wind_max[:3])
+        if forecast_peak > wind_now:
+            score += (forecast_peak - wind_now) * 0.3
+            reasons.append(f"forecast wind gusts up to {round(forecast_peak)} km/h in the next 3 days")
+
+    if score > 75:
+        level, window = "HIGH", "within 24-48 hours"
+    elif score > 45:
+        level, window = "MEDIUM", "within 2-4 days"
+    elif score > 25:
+        level, window = "LOW", "possible later this week"
+    else:
+        level, window = "NONE", "not expected in the near term"
+        reasons = ["No strong storm signals detected in current conditions or forecast"]
+
+    actions = {
+        "HIGH": ["Secure loose outdoor objects and shelter indoors", "Avoid coastal areas and low-lying regions", "Follow official storm/cyclone advisories closely"],
+        "MEDIUM": ["Monitor storm advisories", "Prepare emergency supplies and secure property"],
+        "LOW": ["Stay aware of forecast updates over the coming days"],
+        "NONE": ["No action needed; continue routine monitoring"],
+    }[level]
+
+    confidence = 55 + (15 if daily_wind_max else 0) + (10 if pressure_series else 0)
+    return _hazard_result(level, score * 1.1, confidence, reasons, window, actions)
+
+
+def predict_heatwave(current_weather, daily, zone):
+    daily_max = [v for v in (daily or {}).get("temperature_2m_max", []) if v is not None]
+    temp_now = (current_weather or {}).get("temperature")
+    threshold = 38 if zone and ("Equatorial" in zone or "Subtropical" in zone) else 35
+
+    reasons = []
+    if daily_max:
+        reasons.append(f"forecast highs up to {round(max(daily_max[:5]))}\u00b0C over the next 5 days")
+    if temp_now is not None:
+        reasons.append(f"current temperature {temp_now}\u00b0C")
+
+    hot_days = [t for t in daily_max[:5] if t >= threshold]
+    score = len(hot_days) * 20
+    if daily_max and max(daily_max[:5]) > threshold + 5:
+        score += 20
+        reasons.append(f"peak forecast temperature exceeds the {threshold}\u00b0C zone threshold by 5\u00b0C or more")
+
+    if score > 55:
+        level, window = "HIGH", "within 1-3 days, lasting multiple days"
+    elif score > 25:
+        level, window = "MEDIUM", "within 3-5 days"
+    elif score > 0:
+        level, window = "LOW", "possible later this week"
+    else:
+        level, window = "NONE", "not expected in the near term"
+        reasons = [f"Forecast highs stay below the {threshold}\u00b0C zone threshold"]
+
+    actions = {
+        "HIGH": ["Avoid outdoor activity during peak afternoon hours", "Stay hydrated and check on vulnerable individuals", "Watch for heat exhaustion/heatstroke symptoms"],
+        "MEDIUM": ["Plan outdoor activities for cooler hours", "Keep extra water and shade available"],
+        "LOW": ["Stay aware of the forecast heading into the weekend"],
+        "NONE": ["No action needed; continue routine monitoring"],
+    }[level]
+
+    confidence = 65 + (15 if daily_max else 0)
+    return _hazard_result(level, score * 1.2, confidence, reasons, window, actions)
+
+
+def predict_drought(daily, historical):
+    daily_precip = [v for v in (daily or {}).get("precipitation_sum", []) if v is not None]
+    rain_7d_forecast = sum(daily_precip[:7])
+    dry_days_forecast = sum(1 for v in daily_precip[:7] if v < 1)
+
+    reasons = []
+    if daily_precip:
+        reasons.append(f"only {round(rain_7d_forecast, 1)} mm forecast over the next 7 days")
+    if historical and historical.get("total_30d_mm") is not None:
+        reasons.append(f"{historical['total_30d_mm']} mm fell over the past 30 days")
+
+    score = 0
+    if daily_precip:
+        score += max(0, 10 - rain_7d_forecast) * 3
+        score += dry_days_forecast * 5
+    if historical and (historical.get("total_30d_mm") or 999) < 20:
+        score += 25
+        reasons.append("30-day rainfall total is well below a healthy baseline")
+
+    if score > 55:
+        level, window = "HIGH", "developing over the coming 1-2 weeks"
+    elif score > 30:
+        level, window = "MEDIUM", "developing over the coming 2-4 weeks"
+    elif score > 10:
+        level, window = "LOW", "early signs only"
+    else:
+        level, window = "NONE", "not indicated at this time"
+        reasons = ["Recent and forecast rainfall are within a normal range"]
+
+    actions = {
+        "HIGH": ["Implement water conservation measures now", "Prioritize water use for drinking and essential needs", "Coordinate with local agriculture/water authorities"],
+        "MEDIUM": ["Monitor water reserves and reduce non-essential use", "Watch for updated drought advisories"],
+        "LOW": ["Stay aware of rainfall trends over the coming weeks"],
+        "NONE": ["No action needed; continue routine monitoring"],
+    }[level]
+
+    confidence = 50 + (15 if daily_precip else 0) + (15 if historical else 0)
+    return _hazard_result(level, score * 1.1, confidence, reasons, window, actions)
+
+
+def predict_earthquake_activity(earthquakes, lat, lon):
+    """See module note: this estimates near-term likelihood of
+    CONTINUED seismic activity near a recent event (aftershock-style
+    clustering), not a forecast of a new, independent earthquake."""
+    nearby = [
+        eq for eq in earthquakes
+        if is_near(lat, lon, eq["geometry"]["coordinates"][1], eq["geometry"]["coordinates"][0])
+    ]
+    magnitudes = [eq["properties"].get("mag") or 0 for eq in nearby]
+    best_eq = None
+    if nearby:
+        best = max(nearby, key=lambda eq: eq["properties"].get("mag") or 0)
+        best_eq = (best["properties"]["place"], best["properties"].get("mag") or 0)
+
+    significant = [m for m in magnitudes if m >= 4]
+    max_mag = max(magnitudes) if magnitudes else 0
+
+    if max_mag >= 6:
+        current_level = "HIGH"
+    elif max_mag >= 4:
+        current_level = "MEDIUM"
+    elif max_mag > 0:
+        current_level = "LOW"
+    else:
+        current_level = "NONE"
+
+    reasons = []
+    if best_eq:
+        reasons.append(f"strongest nearby event: magnitude {best_eq[1]} near {best_eq[0]}")
+    reasons.append(f"{len(significant)} earthquake(s) of magnitude 4+ detected nearby in the last 24 hours")
+
+    score = max_mag * 12 + len(significant) * 10
+    if score > 70:
+        pred_level, window = "HIGH", "elevated aftershock likelihood over the next 24-72 hours"
+    elif score > 35:
+        pred_level, window = "MEDIUM", "some continued aftershock activity possible over the next few days"
+    elif score > 0:
+        pred_level, window = "LOW", "minor residual activity possible"
+    else:
+        pred_level, window = "NONE", "no elevated activity detected"
+        reasons = ["No significant earthquakes detected nearby in the last 24 hours"]
+
+    actions = {
+        "HIGH": ["Stay clear of damaged structures; aftershocks can cause further collapse", "Keep emergency supplies accessible", "Follow official seismic advisories"],
+        "MEDIUM": ["Be prepared for aftershocks", "Secure heavy furniture and check for structural damage"],
+        "LOW": ["Stay aware; minor aftershocks are possible"],
+        "NONE": ["No action needed; continue routine monitoring"],
+    }[pred_level]
+
+    confidence = 60 + (10 if nearby else 0)
+    detail = _hazard_result(pred_level, score * 1.1, confidence, reasons, window, actions)
+    return current_level, best_eq, detail
+
+
+def predict_volcano_activity(nearby_volcanoes, volcanoes_all):
+    """See module note: this estimates near-term unrest likelihood from
+    detected seismicity tagged near volcanic centers, not a forecast of
+    eruption timing."""
+    count = len(nearby_volcanoes)
+    reasons = (
+        [f"{count} volcano-linked seismic event(s) detected within 500 km"] if count
+        else ["no volcano-linked seismic activity detected within 500 km"]
+    )
+    current_level = "HIGH" if count else "NONE"
+
+    score = count * 25
+    if score > 60:
+        pred_level, window = "HIGH", "unrest likely continuing over the next few days"
+    elif score > 25:
+        pred_level, window = "MEDIUM", "possible continued unrest this week"
+    elif score > 0:
+        pred_level, window = "LOW", "isolated activity, low continuation likelihood"
+    else:
+        pred_level, window = "NONE", "no unrest indicated"
+
+    actions = {
+        "HIGH": ["Follow official volcanic activity advisories closely", "Avoid areas prone to ashfall or pyroclastic hazards", "Prepare evacuation supplies (masks, goggles)"],
+        "MEDIUM": ["Monitor local volcanic activity bulletins"],
+        "LOW": ["Stay aware of regional volcanic monitoring updates"],
+        "NONE": ["No action needed; continue routine monitoring"],
+    }[pred_level]
+
+    confidence = 55 + (10 if volcanoes_all else 0)
+    detail = _hazard_result(pred_level, score * 1.1, confidence, reasons, window, actions)
+    return current_level, detail
+
+
+HAZARD_DISPLAY_NAMES = {
+    "flood": "Flood", "landslide": "Landslide", "cyclone": "Storm / Cyclone",
+    "heatwave": "Heatwave", "drought": "Drought", "earthquake": "Earthquake",
+    "volcano": "Volcanic Activity",
+}
+
+
+def build_early_warning_alerts(hazard_details):
+    """hazard_details: dict of {hazard_key: hazard_result}. Returns a
+    list of alert dicts for anything at MEDIUM or HIGH, sorted by
+    severity (HIGH first)."""
+    severity_rank = {"HIGH": 2, "MEDIUM": 1, "LOW": 0, "NONE": -1}
+    alerts = []
+    for key, detail in hazard_details.items():
+        if detail["level"] in ("HIGH", "MEDIUM"):
+            alerts.append({
+                "hazard": HAZARD_DISPLAY_NAMES.get(key, key.title()),
+                "level": detail["level"],
+                "probability_pct": detail["probability_pct"],
+                "confidence_pct": detail["confidence_pct"],
+                "window": detail["expected_window"],
+                "reasons": detail["reasons"],
+                "actions": detail["actions"],
+            })
+    alerts.sort(key=lambda a: severity_rank.get(a["level"], -1), reverse=True)
+    return alerts
+
+
+# =========================================================
+#  MAIN ANALYSIS PIPELINE
+#  Runs once per "Analyze Risk" click; result is cached in
+#  st.session_state so every tab can read from it without
+#  re-hitting the network APIs.
+# =========================================================
+def run_analysis(place):
+    lat, lon, district, state, country = get_coordinates(place)
+    if lat is None:
+        return None
+
+    zone, disasters = get_global_climatic_zone(lat, lon)
+
+    # ---------- Weather (extended forecast) ----------
+    # Requests a 7-day forecast with additional hourly/daily variables
+    # (humidity, surface pressure, forecast wind/temperature/precip) in
+    # the same single API call — this feeds the prediction engine below
+    # without adding extra network round-trips.
+    weather_url = (
+        f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+        f"&current_weather=true"
+        f"&hourly=precipitation,temperature_2m,relative_humidity_2m,surface_pressure"
+        f"&daily=precipitation_sum,precipitation_probability_max,temperature_2m_max,"
+        f"temperature_2m_min,windspeed_10m_max"
+        f"&forecast_days=7&timezone=auto"
+    )
+    try:
+        data = requests.get(weather_url, timeout=10).json()
+    except requests.exceptions.RequestException:
+        data = {}
+
+    weather = data.get("current_weather", {})
+    temperature = weather.get("temperature")
+    windspeed = weather.get("windspeed")
+
+    hourly = data.get("hourly", {})
+    daily = data.get("daily", {})
+    precipitation = hourly.get("precipitation", [])
+    temp_series = hourly.get("temperature_2m", [])
+
+    rain_6h = precipitation[:6]
+    rain_24h = precipitation[:24] if len(precipitation) >= 24 else precipitation
+    temp_24h = temp_series[:24] if len(temp_series) >= 24 else temp_series
+
+    rainfall = max(rain_6h) if rain_6h else 0
+    if rainfall == 0 and rain_6h:
+        rainfall = sum(rain_6h)
+    is_raining = any(r > 0.5 for r in rain_6h)
+
+    risk_score = (rainfall * 0.7) + ((windspeed or 0) * 0.3)
+
+    # ---------- Best-effort enrichment data (historical + terrain) ----------
+    # Both are optional signals that raise confidence when available and
+    # are skipped cleanly on failure — fetched concurrently with a short
+    # wall-clock budget so a slow/unavailable source can't stall analysis.
+    historical, elevation = None, None
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            hist_future = executor.submit(fetch_historical_rainfall, lat, lon)
+            elev_future = executor.submit(fetch_elevation_profile, lat, lon)
+            historical = hist_future.result(timeout=6)
+            elevation = elev_future.result(timeout=6)
+    except concurrent.futures.TimeoutError:
+        pass  # keep whichever of historical/elevation already resolved as None
+
+    # ---------- Earthquakes ----------
+    earthquakes = get_earthquakes()
+    earthquake_risk, best_eq, earthquake_detail = predict_earthquake_activity(earthquakes, lat, lon)
+    earthquake_prediction = earthquake_detail["level"]
+
+    # ---------- Volcanoes ----------
+    volcanoes = get_volcano_alerts()
+    nearby_volcanoes = [
+        v for v in volcanoes
+        if is_near(lat, lon, v["geometry"]["coordinates"][1], v["geometry"]["coordinates"][0], threshold_km=500)
+    ]
+    volcano_risk, volcano_detail = predict_volcano_activity(nearby_volcanoes, volcanoes)
+    if any("marapi" in v["properties"]["place"].lower() for v in volcanoes):
+        volcano_risk = "HIGH"
+    volcano_prediction = volcano_detail["level"]
+
+    # ---------- Flood / Landslide / Storm / Heatwave / Drought ----------
+    flood_detail = predict_flood(rainfall, daily, historical)
+    flood_risk = "NO FLOOD RISK" if flood_detail["level"] == "NONE" else flood_detail["level"]
+    flood_prediction = flood_detail["level"] if flood_detail["level"] != "NONE" else "NO RISK"
+
+    landslide_detail = predict_landslide(daily, historical, elevation)
+    cyclone_detail = predict_storm_cyclone(weather, hourly, daily)
+    heatwave_detail = predict_heatwave(weather, daily, zone)
+    drought_detail = predict_drought(daily, historical)
+
+    hazard_details = {
+        "flood": flood_detail, "landslide": landslide_detail, "cyclone": cyclone_detail,
+        "heatwave": heatwave_detail, "drought": drought_detail,
+        "earthquake": earthquake_detail, "volcano": volcano_detail,
+    }
+    early_warning_alerts = build_early_warning_alerts(hazard_details)
+
+    # ---------- Overall ----------
+    # Reflects ALL hazards (not just flood/earthquake/volcano), since an
+    # accurate "overall risk" for an early-warning system shouldn't miss
+    # a severe heatwave or storm just because it isn't one of the
+    # original three categories. This does not change how or when the
+    # Emergency Response system activates (see mas_active below, which
+    # keeps its original flood/earthquake/volcano-only trigger).
+    all_levels = [d["level"] for d in hazard_details.values()]
+    if "HIGH" in all_levels:
+        overall_risk = "HIGH"
+    elif "MEDIUM" in all_levels:
+        overall_risk = "MEDIUM"
+    else:
+        overall_risk = "LOW"
+
+    mas_active = (
+        flood_risk in ["HIGH", "MEDIUM"]
+        or earthquake_risk in ["HIGH", "MEDIUM"]
+        or volcano_risk == "HIGH"
+    )
+
+    # ---------- Emergency response resources ----------
+    severity = overall_risk  # HIGH / MEDIUM / LOW — drives simulation scale
+    hospitals, ambulance_info, food_places, shelters, safe_path, hospital_routes = [], [], [], [], [], []
+    police_stations, fire_stations, blood_banks, ambulance_stations = [], [], [], []
+    ngos, rescue_teams, community_kitchens = [], [], []
+    hospital_error, food_error = None, None
+
+    if mas_active:
+        # Single network round-trip for every live category at once (see
+        # fetch_all_live_resources), run in a background thread with a
+        # hard wall-clock cap. This is a second layer of protection on
+        # top of the internal request timeout/budget: if anything hangs
+        # in a way that ignores those (e.g. a stalled DNS lookup), we
+        # still bail out and fall back to simulated data on schedule
+        # instead of blocking the UI indefinitely.
+        with st.spinner("Fetching live emergency resource data..."):
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(fetch_all_live_resources, lat, lon)
+                    live_buckets, live_error = future.result(timeout=OVERPASS_TOTAL_BUDGET_S + 1)
+            except concurrent.futures.TimeoutError:
+                live_buckets, live_error = {}, "Live resource lookup exceeded the time budget; using simulated data."
+
+        hospital_error = live_error
+        food_error = live_error
+
+        hospitals = attach_estimated_metrics(live_buckets.get("hospital", []), "hospital", severity)
+        hospitals = augment_with_simulated(hospitals, "hospital", lat, lon, district, severity)
+        ambulance_info = generate_ambulance_data(hospitals)
+
+        for h in hospitals[:3]:
+            url = f"https://www.google.com/maps/dir/{h['lat']},{h['lon']}/{lat},{lon}"
+            hospital_routes.append({"name": h["name"], "url": url})
+
+        danger_weight = 100 if flood_risk == "HIGH" else 20
+        graph = {
+            "Start": [("SafeZone1", 5), ("DangerZone", danger_weight)],
+            "SafeZone1": [("SafeZone2", 5)],
+            "DangerZone": [("SafeZone2", danger_weight)],
+            "SafeZone2": [],
+        }
+        safe_path = dijkstra(graph, "Start", "SafeZone2")
+
+        food_places = augment_with_simulated(
+            attach_estimated_metrics(live_buckets.get("food", []), "food_distribution_center", severity),
+            "food_distribution_center", lat, lon, district, severity,
+        )
+        shelters = augment_with_simulated(
+            attach_estimated_metrics(live_buckets.get("shelter", []), "shelter", severity),
+            "shelter", lat, lon, district, severity,
+        )
+        police_stations = augment_with_simulated(
+            attach_estimated_metrics(live_buckets.get("police_station", []), "police_station", severity),
+            "police_station", lat, lon, district, severity,
+        )
+        fire_stations = augment_with_simulated(
+            attach_estimated_metrics(live_buckets.get("fire_station", []), "fire_station", severity),
+            "fire_station", lat, lon, district, severity,
+        )
+        blood_banks = augment_with_simulated(
+            attach_estimated_metrics(live_buckets.get("blood_bank", []), "blood_bank", severity),
+            "blood_bank", lat, lon, district, severity,
+        )
+        ambulance_stations = augment_with_simulated(
+            attach_estimated_metrics(live_buckets.get("ambulance_station", []), "ambulance_station", severity),
+            "ambulance_station", lat, lon, district, severity,
+        )
+
+        # No reliable public OSM coverage for these categories — always modeled.
+        ngos = augment_with_simulated([], "ngo", lat, lon, district, severity)
+        rescue_teams = augment_with_simulated([], "rescue_team", lat, lon, district, severity)
+        community_kitchens = augment_with_simulated([], "community_kitchen", lat, lon, district, severity)
+
+    safe_lat, safe_lon = lat + 0.05, lon + 0.05
+    evacuation_url = (
+        f"https://www.google.com/maps/dir/?api=1&origin={lat},{lon}"
+        f"&destination={safe_lat},{safe_lon}"
+    )
+
+    # ---------- Report text ----------
+    now = datetime.datetime.now()
+    current_date = now.strftime("%d %B %Y")
+    current_time = now.strftime("%I:%M %p")
+
+    report = f"""
+    <b>DISASTER ANALYSIS REPORT</b><br/><br/>
+    <b>1. Location Details</b><br/>
+    Location: {district}, {state}, {country}<br/>
+    Date: {current_date}<br/>
+    Time: {current_time}<br/><br/>
+    <b>2. Weather Information</b><br/>
+    Rainfall (6hr): {round(rainfall, 2)} mm<br/>
+    Temperature: {temperature} °C<br/>
+    Wind Speed: {windspeed} km/h<br/><br/>
+    <b>3. Risk Assessment</b><br/>
+    Flood Risk: {flood_risk}<br/>
+    Earthquake Risk: {earthquake_risk}<br/>
+    Volcano Risk: {volcano_risk}<br/><br/>
+    <b>4. Predictions</b><br/>
+    Flood Prediction: {flood_prediction}<br/>
+    Earthquake Prediction: {earthquake_prediction}<br/>
+    Volcano Prediction: {volcano_prediction}<br/><br/>
+    """
+
+    report += "<b>5. Suggested Action</b><br/>"
+    if earthquake_risk == "HIGH":
+        report += "High earthquake risk. Move to open safe areas immediately.<br/>"
+    elif earthquake_risk == "MEDIUM":
+        report += "Moderate earthquake activity. Stay alert and avoid unsafe structures.<br/>"
+    elif flood_risk == "HIGH":
+        report += "High flood risk. Evacuate low-lying areas.<br/>"
+    elif flood_risk == "MEDIUM":
+        report += "Moderate flood risk. Stay alert.<br/>"
+    elif flood_risk == "LOW":
+        report += "Low flood risk. Stay cautious.<br/>"
+    else:
+        report += "No immediate disaster risk. Safe conditions.<br/>"
+
+    report += "<br/><b>6. Trigger Source</b><br/>"
+    if earthquake_risk in ["HIGH", "MEDIUM"]:
+        report += "Earthquake Activity"
+    elif flood_risk == "HIGH":
+        report += "Flood Risk"
+    else:
+        report += "No Threat"
+
+    if hospitals:
+        report += "\n\n🏥 Nearby Hospitals:\n"
+        for h in hospitals[:3]:
+            distance_note = f" ({h['distance_km']} km)" if h.get("distance_km") is not None else ""
+            report += f"- {h['name']}{distance_note}\n"
+
+    return {
+        "place_query": place,
+        "lat": lat, "lon": lon,
+        "district": district, "state": state, "country": country,
+        "zone": zone, "disasters": disasters,
+        "temperature": temperature, "windspeed": windspeed,
+        "rain_6h": rain_6h, "rain_24h": rain_24h, "temp_24h": temp_24h,
+        "rainfall": rainfall, "is_raining": is_raining,
+        "flood_risk": flood_risk, "flood_prediction": flood_prediction,
+        "risk_score": risk_score,
+        "earthquake_risk": earthquake_risk, "earthquake_prediction": earthquake_prediction,
+        "best_eq": best_eq,
+        "volcano_risk": volcano_risk, "volcano_prediction": volcano_prediction,
+        "nearby_volcanoes": nearby_volcanoes,
+        "overall_risk": overall_risk, "mas_active": mas_active,
+        "flood_detail": flood_detail, "landslide_detail": landslide_detail,
+        "cyclone_detail": cyclone_detail, "heatwave_detail": heatwave_detail,
+        "drought_detail": drought_detail, "earthquake_detail": earthquake_detail,
+        "volcano_detail": volcano_detail, "early_warning_alerts": early_warning_alerts,
+        "historical_rainfall": historical, "elevation_profile": elevation,
+        "daily_forecast": daily,
+        "hospitals": hospitals, "hospital_error": hospital_error,
+        "ambulance_info": ambulance_info, "hospital_routes": hospital_routes,
+        "food_places": food_places, "food_error": food_error,
+        "shelters": shelters,
+        "police_stations": police_stations, "fire_stations": fire_stations,
+        "blood_banks": blood_banks, "ambulance_stations": ambulance_stations,
+        "ngos": ngos, "rescue_teams": rescue_teams, "community_kitchens": community_kitchens,
+        "safe_path": safe_path,
+        "evacuation_url": evacuation_url,
+        "report_text": report,
+        "current_date": current_date, "current_time": current_time,
+    }
+
+
+# =========================================================
+#  RENDER: HOME TAB
+# =========================================================
+def render_home_tab(analysis):
+    st.subheader("🌍 Live Disaster Risk Map")
+    st.info("💡 View high-risk zones (red) and enter a location above to analyze")
+
+    try:
+        world_map = load_world_map()
+        earthquakes = get_earthquakes()
+        country_colors = get_country_risk_from_earthquakes(earthquakes)
+
+        for feature in world_map["features"]:
+            country_name = feature["properties"]["name"]
+            feature["properties"]["color"] = country_colors.get(country_name, [0, 255, 0, 80])
+
+        geojson_layer = pdk.Layer(
+            "GeoJsonLayer",
+            world_map,
+            get_fill_color="properties.color",
+            pickable=True,
+            stroked=True,
+            filled=True,
+        )
+        view_state = pdk.ViewState(latitude=20, longitude=0, zoom=1.5)
+        st.pydeck_chart(pdk.Deck(layers=[geojson_layer], initial_view_state=view_state))
+    except Exception as e:
+        log_error("Could not load the live world risk map.", exc=e)
+
+    if analysis is None:
+        st.markdown("---")
+        st.write("👆 Enter a place name above and click **Analyze Risk** to get started.")
+        return
+
+    st.markdown("---")
+    st.subheader("📍 Latest Analysis Snapshot")
+    st.success(
+        f"📍 {analysis['district']}, {analysis['state']}, {analysis['country']} "
+        f"(Lat: {analysis['lat']}, Lon: {analysis['lon']})"
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🌊 Flood Risk", analysis["flood_risk"])
+    c2.metric("🌍 Earthquake Risk", analysis["earthquake_risk"])
+    c3.metric("🌋 Volcano Risk", analysis["volcano_risk"])
+
+    if analysis["overall_risk"] == "HIGH":
+        st.error(f"🚨 Overall Risk: {analysis['overall_risk']}")
+    elif analysis["overall_risk"] == "MEDIUM":
+        st.warning(f"⚠️ Overall Risk: {analysis['overall_risk']}")
+    else:
+        st.success(f"✅ Overall Risk: {analysis['overall_risk']}")
+
+
+# =========================================================
+#  RENDER: DISASTER PREDICTION TAB
+# =========================================================
+def _render_hazard_explain(detail, caveat=None):
+    """Shared 'why' block: probability, confidence, reasons, and
+    recommended actions for a single hazard prediction. Used across all
+    hazard sections so the reasoning is always visible, not just a risk
+    word."""
+    st.caption(
+        f"Estimated probability: {detail['probability_pct']}%  •  "
+        f"Confidence: {detail['confidence_pct']}%  •  Expected: {detail['expected_window']}"
+    )
+    if caveat:
+        st.caption(caveat)
+    with st.expander("Why this prediction? / Recommended actions"):
+        st.write("**Contributing factors:**")
+        for r in detail["reasons"]:
+            st.write(f"- {r}")
+        st.write("**Recommended actions:**")
+        for act in detail["actions"]:
+            st.write(f"- {act}")
+
+
+def render_prediction_tab(analysis):
+    if analysis is None:
+        st.info("Run an analysis from the input above to see predictions here.")
+        return
+
+    # ---------- Early Warning Alerts ----------
+    st.subheader("🚨 Early Warning Alerts")
+    if analysis["early_warning_alerts"]:
+        for alert in analysis["early_warning_alerts"]:
+            banner = st.error if alert["level"] == "HIGH" else st.warning
+            banner(
+                f"{alert['hazard']} — {alert['level']} risk "
+                f"({alert['probability_pct']}% probability, {alert['confidence_pct']}% confidence) — "
+                f"expected {alert['window']}"
+            )
+    else:
+        st.success("✅ No elevated hazards detected — all monitored risks are LOW or NONE.")
+    st.caption(
+        "This is a rule-based early-warning estimate combining live forecast data, recent seismic "
+        "activity, and best-effort historical/terrain context — not a trained AI model, and not a "
+        "guarantee. Earthquake/volcano figures estimate near-term continued activity, not the timing "
+        "of a new event; no system can forecast that."
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("📍 Location Info")
+        st.write("Zone:", analysis["zone"])
+        st.write("Disasters:", analysis["disasters"])
+    with col2:
+        st.subheader("🌤️ Weather Info")
+        st.write("Temperature:", analysis["temperature"], "°C")
+        st.write("Wind Speed:", analysis["windspeed"], "km/h")
+
+    st.subheader("🌧️ Rain Status")
+    if analysis["is_raining"]:
+        st.success("🌧️ Rain detected in forecast")
+    else:
+        st.info("☁️ No rain detected")
+
+    st.subheader("🌊 Flood Risk Status")
+    st.write("Risk Score:", round(analysis["risk_score"], 2))
+    if analysis["flood_risk"] == "HIGH":
+        st.error("🚨 HIGH FLOOD RISK")
+    elif analysis["flood_risk"] == "MEDIUM":
+        st.warning("⚠️ MEDIUM FLOOD RISK")
+    elif analysis["flood_risk"] == "LOW":
+        st.warning("✅ LOW FLOOD RISK")
+    else:
+        st.success("✅ NO FLOOD RISK")
+    _render_hazard_explain(analysis["flood_detail"])
+
+    st.subheader("🌍 Earthquake Alerts")
+    if analysis["best_eq"]:
+        place_name, magnitude = analysis["best_eq"]
+        st.write(f"📍 Location: {place_name}")
+        st.write(f"📊 Magnitude: {magnitude}")
+        if analysis["earthquake_risk"] == "HIGH":
+            st.error("🚨 HIGH EARTHQUAKE RISK")
+        elif analysis["earthquake_risk"] == "MEDIUM":
+            st.warning("⚠️ MODERATE EARTHQUAKE")
+        else:
+            st.success("🟢 LOW IMPACT EARTHQUAKE")
+    else:
+        st.success("✅ No recent earthquakes nearby")
+    _render_hazard_explain(
+        analysis["earthquake_detail"],
+        caveat="Reflects near-term aftershock/continued-activity likelihood, not a forecast of a new earthquake.",
+    )
+
+    st.subheader("🌋 Volcano Alerts")
+    if analysis["nearby_volcanoes"]:
+        for v in analysis["nearby_volcanoes"][:3]:
+            st.write(f"🌋 {v['properties']['place']}")
+            st.write(f"Activity Level: {v['properties']['mag']}")
+        st.error("🚨 VOLCANIC ACTIVITY DETECTED")
+    else:
+        st.success("✅ No volcanic activity detected nearby")
+    _render_hazard_explain(
+        analysis["volcano_detail"],
+        caveat="Reflects unrest likelihood from nearby seismicity, not a forecast of eruption timing.",
+    )
+
+    st.subheader("🔮 Disaster Prediction Summary")
+    st.write("🌊 Flood Prediction:", analysis["flood_prediction"])
+    st.write("🌍 Earthquake Prediction:", analysis["earthquake_prediction"])
+    st.write("🌋 Volcano Prediction:", analysis["volcano_prediction"])
+
+    # ---------- Extended hazard predictions ----------
+    st.subheader("🧭 Extended Hazard Predictions")
+
+    st.markdown("**⛰️ Landslide Risk**")
+    ld = analysis["landslide_detail"]
+    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[ld["level"]](
+        f"{ld['level']} landslide risk"
+    )
+    _render_hazard_explain(ld)
+
+    st.markdown("**🌀 Storm / Cyclone Risk**")
+    cd = analysis["cyclone_detail"]
+    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[cd["level"]](
+        f"{cd['level']} storm/cyclone risk"
+    )
+    _render_hazard_explain(cd)
+
+    st.markdown("**🌡️ Heatwave Risk**")
+    hd = analysis["heatwave_detail"]
+    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[hd["level"]](
+        f"{hd['level']} heatwave risk"
+    )
+    _render_hazard_explain(hd)
+
+    st.markdown("**🏜️ Drought Risk**")
+    dd = analysis["drought_detail"]
+    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[dd["level"]](
+        f"{dd['level']} drought risk"
+    )
+    _render_hazard_explain(dd)
+
+
+# =========================================================
+#  RENDER: EMERGENCY RESPONSE TAB
+# =========================================================
+def render_resource_card(r):
+    """Renders one emergency resource with an honest source badge —
+    'Live' for OpenStreetMap-sourced identity/location data, 'Estimated'
+    for modeled entries. Capacity/status figures are always model
+    estimates (no public feed exists for real-time bed/ambulance counts),
+    so that framing doesn't change based on source."""
+    badge = "🟢 Live" if r.get("source") == "live" else "🔧 Estimated"
+    st.write(f"**{r['name']}**  ·  {r.get('type', '')}")
+    st.caption(
+        f"{badge}   •   {r['distance_km']} km away   •   "
+        f"~{r.get('travel_time_min', '?')} min travel   •   updated {r.get('last_updated', '')}"
+    )
+    if r.get("address"):
+        st.write(f"🏠 {r['address']}")
+    if r.get("contact"):
+        st.write(f"📞 {r['contact']}")
+
+    if "beds_available" in r:
+        st.write(f"🛏️ Beds: {r['beds_available']}/{r['capacity']} available  |  🏥 ICU: {r['icu_available']}/{r['icu_beds']}")
+        st.write(f"👨‍⚕️ Doctors on duty: {r['doctors_on_duty']}  |  🚑 Ambulances: {r['ambulances']}")
+    elif "fleet_size" in r:
+        st.write(f"🚑 Fleet: {r['fleet_size']}  |  Available: {r['ambulances_available']}  |  Dispatched: {r['ambulances_dispatched']}")
+    elif "current_occupants" in r:
+        st.write(f"👥 Occupancy: {r['current_occupants']}/{r['capacity']}")
+    elif "personnel" in r:
+        st.write(f"👮 Personnel: {r['personnel']}  |  Deployed: {r['deployed']}  |  Vehicles: {r['vehicles']}")
+    elif "blood_units_available" in r:
+        st.write(f"🩸 Units available: {r['blood_units_available']}")
+    elif "volunteers" in r:
+        st.write(f"🙋 Volunteers: {r['volunteers']}  |  Deployed: {r['deployed']}")
+
+    st.write(f"📊 Status: {r.get('status', 'Operational')}  ({r.get('occupancy_pct', '?')}% load)")
+    st.write("---")
+
+
+def render_response_tab(analysis):
+    if analysis is None:
+        st.info("Run an analysis from the input above to see emergency response options here.")
+        return
+
+    if not analysis["mas_active"]:
+        st.success("✅ Risk levels are low — emergency response system is on standby.")
+        return
+
+    st.subheader("🤖 Emergency Response System Activated")
+    st.caption(
+        "📡 Locations marked **🟢 Live** come from OpenStreetMap. Where live coverage is "
+        "sparse, entries marked **🔧 Estimated** fill the gap with modeled data so response "
+        "planning isn't blocked. Capacity/status figures (beds, ambulances, occupancy) are "
+        "always modeled — no public feed provides real-time facility status."
+    )
+
+    # ---------- Hospitals ----------
+    st.subheader("🏥 Nearby Hospitals & Clinics")
+    if analysis.get("hospital_error") and not analysis["hospitals"]:
+        st.error(f"⚠️ {analysis['hospital_error']}")
+    for h in analysis["hospitals"][:5]:
+        render_resource_card(h)
+
+    # ---------- Map of all resources ----------
+    category_colors = {
+        "Hospital": [220, 30, 30], "Clinic": [220, 30, 30],
+        "Food Distribution Center": [255, 165, 0], "Relief Shelter": [150, 50, 200],
+        "Ambulance Station": [0, 200, 200], "Police Station": [30, 90, 220],
+        "Fire Station": [230, 90, 20], "Blood Bank": [230, 20, 120],
+        "NGO / Aid Organization": [50, 160, 60], "Rescue Team": [90, 200, 90],
+        "Community Kitchen": [200, 180, 30],
+    }
+    all_resource_lists = (
+        analysis["hospitals"][:10] + analysis["food_places"][:10] + analysis["shelters"][:6]
+        + analysis["ambulance_stations"][:6] + analysis["police_stations"][:4]
+        + analysis["fire_stations"][:4] + analysis["blood_banks"][:4]
+        + analysis["ngos"][:4] + analysis["rescue_teams"][:4] + analysis["community_kitchens"][:4]
+    )
+    map_points = [
+        {"name": r["name"], "lat": r["lat"], "lon": r["lon"],
+         "color": category_colors.get(r["type"], [120, 120, 120]), "kind": r["type"]}
+        for r in all_resource_lists
+    ]
+
+    if map_points:
+        st.subheader("🗺️ Emergency Resources Map")
+        points_df = pd.DataFrame(map_points)
+        user_df = pd.DataFrame([{"lat": analysis["lat"], "lon": analysis["lon"]}])
+
+        resource_layer = pdk.Layer(
+            "ScatterplotLayer", points_df,
+            get_position="[lon, lat]", get_fill_color="color", get_radius=250, pickable=True,
+        )
+        user_layer = pdk.Layer(
+            "ScatterplotLayer", user_df,
+            get_position="[lon, lat]", get_fill_color=[30, 90, 220], get_radius=350,
+        )
+        view_state = pdk.ViewState(latitude=analysis["lat"], longitude=analysis["lon"], zoom=10)
+        st.pydeck_chart(pdk.Deck(
+            layers=[resource_layer, user_layer], initial_view_state=view_state,
+            tooltip={"text": "{name} ({kind})"},
+        ))
+        st.caption("🔵 Your location — other colors correspond to each resource type shown below.")
+
+    # ---------- Ambulance dispatch ----------
+    st.subheader("🚑 Ambulance Dispatch System")
+    for a in analysis["ambulance_info"]:
+        st.write(f"🏥 {a['name']}")
+        st.write(f"🚑 Total Ambulances: {a['total']}")
+        st.write(f"🚨 Dispatched: {a['dispatched']}")
+
+    if analysis["hospital_routes"]:
+        st.subheader("🚗 Ambulance Routes")
+        for r in analysis["hospital_routes"]:
+            st.markdown(f"[🚑 View Ambulance Route from {r['name']}]({r['url']})")
+
+    st.subheader("🚗 Safe Evacuation Route (Google Maps)")
+    st.markdown(f"[🗺️ Open Route in Google Maps]({analysis['evacuation_url']})")
+
+    st.subheader("🧠 Smart Safe Route")
+    st.success(" → ".join(analysis["safe_path"]))
+
+    # ---------- Food resources ----------
+    st.subheader("🍞 Food Resources")
+    if analysis.get("food_error") and not analysis["food_places"]:
+        st.error(f"⚠️ {analysis['food_error']}")
+    for f in analysis["food_places"][:5]:
+        render_resource_card(f)
+
+    # ---------- Additional emergency resource categories ----------
+    with st.expander("🏚️ Shelters & Evacuation Centers"):
+        for r in analysis["shelters"][:6]:
+            render_resource_card(r)
+
+    with st.expander("🚑 Ambulance Stations"):
+        for r in analysis["ambulance_stations"][:6]:
+            render_resource_card(r)
+
+    with st.expander("👮 Police & 🚒 Fire Stations"):
+        st.write("**Police Stations**")
+        for r in analysis["police_stations"][:4]:
+            render_resource_card(r)
+        st.write("**Fire Stations**")
+        for r in analysis["fire_stations"][:4]:
+            render_resource_card(r)
+
+    with st.expander("🩸 Blood Banks"):
+        for r in analysis["blood_banks"][:4]:
+            render_resource_card(r)
+
+    with st.expander("🤝 NGOs & Rescue Teams"):
+        st.write("**NGOs / Aid Organizations**")
+        for r in analysis["ngos"][:4]:
+            render_resource_card(r)
+        st.write("**Rescue Teams**")
+        for r in analysis["rescue_teams"][:4]:
+            render_resource_card(r)
+
+    with st.expander("🍲 Community Kitchens"):
+        for r in analysis["community_kitchens"][:4]:
+            render_resource_card(r)
+
+
+# =========================================================
+#  RENDER: ANALYTICS TAB
+# =========================================================
+def render_analytics_tab(analysis):
+    if analysis is None:
+        st.info("Run an analysis from the input above to see analytics here.")
+        return
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.subheader("📈 Rainfall Trend (Next 24 Hours)")
+        plt.figure()
+        plt.plot(analysis["rain_24h"])
+        plt.xlabel("Time (Hours)")
+        plt.ylabel("Rainfall (mm)")
+        plt.title("Rainfall Forecast")
+        plt.grid()
+        st.pyplot(plt)
+        plt.close()
+
+    with col4:
+        st.subheader("🌡️ Temperature Trend (Next 24 Hours)")
+        plt.figure()
+        plt.plot(analysis["temp_24h"])
+        plt.xlabel("Time (Hours)")
+        plt.ylabel("Temperature (°C)")
+        plt.title("Temperature Forecast")
+        plt.grid()
+        st.pyplot(plt)
+        plt.close()
+
+    st.subheader("🌍 Weather Dashboard")
+    col5, col6, col7 = st.columns(3)
+    col5.metric("🌧️ Rainfall (6hr)", f"{round(analysis['rainfall'], 2)} mm")
+    col6.metric("🌡️ Temperature", f"{analysis['temperature']} °C")
+    col7.metric("💨 Wind Speed", f"{analysis['windspeed']} km/h")
+
+    st.subheader("🗺️ Location Map")
+    df = pd.DataFrame({"lat": [analysis["lat"]], "lon": [analysis["lon"]]})
+    st.map(df)
+
+
+# =========================================================
+#  RENDER: REPORT TAB
+# =========================================================
+def render_report_tab(analysis):
+    if analysis is None:
+        st.info("Run an analysis from the input above to generate a report.")
+        return
+
+    st.subheader("📄 Disaster Analysis Report")
+    # st.text_area("Report Summary", analysis["report_text"], height=300)
+
+    try:
+        pdf_bytes = create_pdf(analysis)
+    except Exception as e:
+        log_error("PDF generation failed.", exc=e)
+        pdf_bytes = None
+
+    if pdf_bytes:
+        st.download_button(
+            label="📄 Download PDF Report",
+            data=pdf_bytes,
+            file_name="disaster_report.pdf",
+            mime="application/pdf",
+        )
+
+    try:
+        audio_bytes = generate_audio_report(analysis)
+        st.audio(audio_bytes, format="audio/mpeg")
+        st.download_button(
+            label="🎵 Download Audio Report",
+            data=audio_bytes,
+            file_name="disaster_audio_report.mp3",
+            mime="audio/mpeg",
+        )
+    except Exception as e:
+        log_error("Error generating or playing audio report.", exc=e)
+
+
+# =========================================================
+#  APP ENTRY POINT
+# =========================================================
+def main():
+    st.set_page_config(page_title="Disaster Copilot", layout="wide")
+
+    st.title("🌍 Disaster Copilot Dashboard")
+    st.markdown("Real-time disaster risk analysis using weather intelligence")
+
+    now = datetime.datetime.now()
+    st.markdown(f"📅 Date: {now.strftime('%d %B %Y')} | ⏰ Time: {now.strftime('%I:%M %p')}")
+
+    if "analysis" not in st.session_state:
+        st.session_state.analysis = None
+
+    place = st.text_input("Enter Place Name")
+    if st.button("Analyze Risk"):
+        with st.spinner("Analyzing risk..."):
+            try:
+                result = run_analysis(place)
+            except Exception as e:
+                result = None
+                log_error("Something went wrong while analyzing this location.", exc=e)
+
+        if result is None:
+            st.error("Place not found ❌")
+        else:
+            st.session_state.analysis = result
+
+    tab_home, tab_pred, tab_resp, tab_analytics, tab_report = st.tabs(
+        ["🏠 Home", "🌪️ Disaster Prediction", "🚨 Emergency Response", "📊 Analytics", "📄 Report"]
+    )
+
+    with tab_home:
+        render_home_tab(st.session_state.analysis)
+    with tab_pred:
+        render_prediction_tab(st.session_state.analysis)
+    with tab_resp:
+        render_response_tab(st.session_state.analysis)
+    with tab_analytics:
+        render_analytics_tab(st.session_state.analysis)
+    with tab_report:
+        render_report_tab(st.session_state.analysis)
+
+
+if __name__ == "__main__":
+    main()
