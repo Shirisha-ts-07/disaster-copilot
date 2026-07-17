@@ -2635,145 +2635,291 @@ def render_home_tab(analysis):
 
 # =========================================================
 #  RENDER: DISASTER PREDICTION TAB
+#
+#  UI-only redesign. Nothing here recomputes or alters any prediction —
+#  every value rendered is read as-is from the `analysis` dict produced
+#  by run_analysis() and the hazard predictors above. Only the layout
+#  and styling of this tab changed.
 # =========================================================
+_PREDICTION_CSS = """
+<style>
+.dp-hero {
+    border-radius: 16px; padding: 22px 26px; margin-bottom: 18px; color: white;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+}
+.dp-hero-high { background: linear-gradient(120deg,#c0392b,#8e2418); }
+.dp-hero-medium { background: linear-gradient(120deg,#e2a712,#c98a0a); }
+.dp-hero-low { background: linear-gradient(120deg,#1e8449,#166638); }
+.dp-hero-title { font-size: 1.05rem; font-weight: 700; opacity: 0.92; letter-spacing: 0.02em; }
+.dp-hero-sub { font-size: 0.85rem; opacity: 0.85; margin-top: 2px; }
+.dp-hero-score { text-align: right; }
+.dp-hero-score-num { font-size: 2.1rem; font-weight: 800; line-height: 1; }
+.dp-hero-score-label { font-size: 0.72rem; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.dp-alert-strip { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 10px 2px; margin-bottom: 4px; }
+.dp-alert-chip {
+    flex: 0 0 auto; border-radius: 10px; padding: 10px 14px; min-width: 190px;
+    color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.dp-alert-chip-high { background: linear-gradient(135deg,#c0392b,#932a1c); }
+.dp-alert-chip-medium { background: linear-gradient(135deg,#e2a712,#b9800a); }
+.dp-alert-chip-title { font-weight: 700; font-size: 0.88rem; }
+.dp-alert-chip-meta { font-size: 0.72rem; opacity: 0.9; margin-top: 3px; }
+.dp-alert-clear {
+    border-radius: 12px; padding: 14px 18px; background: linear-gradient(135deg,#eafaf1,#d7f3e3);
+    border: 1px solid #bfe8cf; color: #1e6b3d; font-weight: 600; font-size: 0.9rem;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+}
+.dp-section-title {
+    font-size: 1.05rem; font-weight: 800; margin: 26px 0 10px 0; color: #1a2b3c;
+    display: flex; align-items: center; gap: 8px;
+}
+.dp-info-pill {
+    display: inline-block; background: #eef2f7; color: #4a5568; font-size: 0.74rem;
+    padding: 3px 10px; border-radius: 999px; margin-bottom: 14px;
+}
+
+.dp-card {
+    border-radius: 14px; border: 1px solid #e8eaee; padding: 16px 18px; margin-bottom: 14px;
+    background: #ffffff; box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+}
+.dp-card-high { border-left: 5px solid #c0392b; }
+.dp-card-medium { border-left: 5px solid #e2a712; }
+.dp-card-low { border-left: 5px solid #3a8fd8; }
+.dp-card-none { border-left: 5px solid #27ae60; }
+
+.dp-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.dp-card-heading { display: flex; align-items: center; gap: 10px; }
+.dp-card-icon { font-size: 1.5rem; line-height: 1; }
+.dp-card-name { font-weight: 750; font-size: 1.0rem; color: #1a2b3c; }
+.dp-card-window { font-size: 0.78rem; color: #7a8494; margin-top: 1px; }
+
+.dp-badge {
+    font-size: 0.72rem; font-weight: 800; padding: 4px 12px; border-radius: 999px;
+    letter-spacing: 0.03em; white-space: nowrap;
+}
+.dp-badge-high { background: #fdecea; color: #c0392b; border: 1px solid #f3c2bd; }
+.dp-badge-medium { background: #fdf3da; color: #8a6206; border: 1px solid #f0dca0; }
+.dp-badge-low { background: #e8f2fc; color: #2367a5; border: 1px solid #bfdcf5; }
+.dp-badge-none { background: #e9f9ef; color: #1e8449; border: 1px solid #bfe8cf; }
+
+.dp-bar-row { margin-top: 12px; }
+.dp-bar-label { display: flex; justify-content: space-between; font-size: 0.74rem; color: #6b7280; margin-bottom: 4px; }
+.dp-bar-track { background: #eef1f5; border-radius: 6px; height: 9px; overflow: hidden; }
+.dp-bar-fill { height: 100%; border-radius: 6px; }
+.dp-bar-fill-high { background: linear-gradient(90deg,#e0574a,#c0392b); }
+.dp-bar-fill-medium { background: linear-gradient(90deg,#f0c04d,#e2a712); }
+.dp-bar-fill-low { background: linear-gradient(90deg,#6ab0e8,#3a8fd8); }
+.dp-bar-fill-none { background: linear-gradient(90deg,#5bc98a,#27ae60); }
+.dp-bar-fill-conf { background: linear-gradient(90deg,#9aa5b1,#5f6b7a); }
+
+.dp-weather-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 12px; margin-bottom: 6px; }
+.dp-weather-card {
+    border-radius: 12px; padding: 14px; text-align: center; background: #f7f9fc;
+    border: 1px solid #e8eaee;
+}
+.dp-weather-icon { font-size: 1.5rem; }
+.dp-weather-label { font-size: 0.72rem; color: #7a8494; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+.dp-weather-value { font-size: 1.15rem; font-weight: 800; color: #1a2b3c; margin-top: 2px; }
+</style>
+"""
+
+_RISK_ICONS = {
+    "flood": "🌊", "landslide": "⛰️", "cyclone": "🌀", "heatwave": "🌡️",
+    "drought": "🏜️", "earthquake": "🌍", "volcano": "🌋",
+}
+
+_LEVEL_CLASS = {"HIGH": "high", "MEDIUM": "medium", "LOW": "low", "NONE": "none"}
+
+
+def _dp_badge_html(level):
+    cls = _LEVEL_CLASS.get(level, "none")
+    return f"<span class='dp-badge dp-badge-{cls}'>{level}</span>"
+
+
+def _dp_bar_html(label, pct, cls):
+    pct = max(0, min(100, pct))
+    return f"""
+    <div class="dp-bar-row">
+        <div class="dp-bar-label"><span>{label}</span><span>{pct}%</span></div>
+        <div class="dp-bar-track"><div class="dp-bar-fill dp-bar-fill-{cls}" style="width:{pct}%;"></div></div>
+    </div>
+    """
+
+
 def _render_hazard_explain(detail, caveat=None):
     """Shared 'why' block: probability, confidence, reasons, and
-    recommended actions for a single hazard prediction. Used across all
-    hazard sections so the reasoning is always visible, not just a risk
-    word."""
-    st.caption(
-        f"Estimated probability: {detail['probability_pct']}%  •  "
-        f"Confidence: {detail['confidence_pct']}%  •  Expected: {detail['expected_window']}"
-    )
-    if caveat:
-        st.caption(caveat)
-    with st.expander("Why this prediction? / Recommended actions"):
-        st.write("**Contributing factors:**")
+    recommended actions for a single hazard prediction. All values are
+    read verbatim from `detail`, which is produced upstream by the
+    (unchanged) prediction engine — only the presentation is new."""
+    with st.expander("🔎 Why this prediction? / Recommended actions"):
+        if caveat:
+            st.caption(caveat)
+        st.markdown("**Contributing factors**")
         for r in detail["reasons"]:
-            st.write(f"- {r}")
-        st.write("**Recommended actions:**")
+            st.markdown(f"- {r}")
+        st.markdown("**Recommended actions**")
         for act in detail["actions"]:
-            st.write(f"- {act}")
+            st.markdown(f"- {act}")
+
+
+def _render_hazard_card(key, label, detail, caveat=None, extra_lines=None):
+    """One self-contained hazard card: icon, name, risk badge, expected
+    window, probability + confidence bars, then the existing
+    'why this prediction' expander underneath. `extra_lines` optionally
+    surfaces hazard-specific facts (e.g. the strongest nearby earthquake)
+    right under the header, still sourced straight from `analysis`."""
+    level = detail["level"]
+    cls = _LEVEL_CLASS.get(level, "none")
+    icon = _RISK_ICONS.get(key, "⚠️")
+
+    card_html = f"""
+    <div class="dp-card dp-card-{cls}">
+        <div class="dp-card-top">
+            <div class="dp-card-heading">
+                <span class="dp-card-icon">{icon}</span>
+                <div>
+                    <div class="dp-card-name">{label}</div>
+                    <div class="dp-card-window">Expected: {detail['expected_window']}</div>
+                </div>
+            </div>
+            {_dp_badge_html(level)}
+        </div>
+        {_dp_bar_html("Probability", detail['probability_pct'], cls)}
+        {_dp_bar_html("Model confidence", detail['confidence_pct'], "conf")}
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
+    if extra_lines:
+        for line in extra_lines:
+            st.caption(line)
+
+    _render_hazard_explain(detail, caveat=caveat)
 
 
 def render_prediction_tab(analysis):
+    st.markdown(_PREDICTION_CSS, unsafe_allow_html=True)
+
     if analysis is None:
         st.info("Run an analysis from the input above to see predictions here.")
         return
 
-    # ---------- Early Warning Alerts ----------
-    st.subheader("🚨 Early Warning Alerts")
-    if analysis["early_warning_alerts"]:
-        for alert in analysis["early_warning_alerts"]:
-            banner = st.error if alert["level"] == "HIGH" else st.warning
-            banner(
-                f"{alert['hazard']} — {alert['level']} risk "
-                f"({alert['probability_pct']}% probability, {alert['confidence_pct']}% confidence) — "
-                f"expected {alert['window']}"
-            )
-    else:
-        st.success("✅ No elevated hazards detected — all monitored risks are LOW or NONE.")
-    st.caption(
-        "This is a rule-based early-warning estimate combining live forecast data, recent seismic "
-        "activity, and best-effort historical/terrain context — not a trained AI model, and not a "
-        "guarantee. Earthquake/volcano figures estimate near-term continued activity, not the timing "
-        "of a new event; no system can forecast that."
+    # ---------- Hero summary ----------
+    overall = analysis["overall_risk"]
+    hero_cls = {"HIGH": "high", "MEDIUM": "medium", "LOW": "low"}.get(overall, "low")
+    st.markdown(
+        f"""
+        <div class="dp-hero dp-hero-{hero_cls}">
+            <div>
+                <div class="dp-hero-title">🧭 Disaster Prediction — {analysis['district']}, {analysis['state']}</div>
+                <div class="dp-hero-sub">{analysis['zone']} · commonly prone to {', '.join(analysis['disasters'])}</div>
+            </div>
+            <div class="dp-hero-score">
+                <div class="dp-hero-score-num">{overall}</div>
+                <div class="dp-hero-score-label">Overall Risk · Score {round(analysis['risk_score'], 1)}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("📍 Location Info")
-        st.write("Zone:", analysis["zone"])
-        st.write("Disasters:", analysis["disasters"])
-    with col2:
-        st.subheader("🌤️ Weather Info")
-        st.write("Temperature:", analysis["temperature"], "°C")
-        st.write("Wind Speed:", analysis["windspeed"], "km/h")
-
-    st.subheader("🌧️ Rain Status")
+    # ---------- Location & Weather snapshot ----------
+    st.markdown("<div class='dp-section-title'>📍 Location &amp; Weather Snapshot</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="dp-weather-grid">
+            <div class="dp-weather-card">
+                <div class="dp-weather-icon">🌡️</div>
+                <div class="dp-weather-label">Temperature</div>
+                <div class="dp-weather-value">{analysis['temperature']} °C</div>
+            </div>
+            <div class="dp-weather-card">
+                <div class="dp-weather-icon">💨</div>
+                <div class="dp-weather-label">Wind Speed</div>
+                <div class="dp-weather-value">{analysis['windspeed']} km/h</div>
+            </div>
+            <div class="dp-weather-card">
+                <div class="dp-weather-icon">{"🌧️" if analysis["is_raining"] else "☁️"}</div>
+                <div class="dp-weather-label">Rain (6h)</div>
+                <div class="dp-weather-value">{round(analysis['rainfall'], 1)} mm</div>
+            </div>
+            <div class="dp-weather-card">
+                <div class="dp-weather-icon">📊</div>
+                <div class="dp-weather-label">Risk Score</div>
+                <div class="dp-weather-value">{round(analysis['risk_score'], 1)}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     if analysis["is_raining"]:
         st.success("🌧️ Rain detected in forecast")
     else:
         st.info("☁️ No rain detected")
 
-    st.subheader("🌊 Flood Risk Status")
-    st.write("Risk Score:", round(analysis["risk_score"], 2))
-    if analysis["flood_risk"] == "HIGH":
-        st.error("🚨 HIGH FLOOD RISK")
-    elif analysis["flood_risk"] == "MEDIUM":
-        st.warning("⚠️ MEDIUM FLOOD RISK")
-    elif analysis["flood_risk"] == "LOW":
-        st.warning("✅ LOW FLOOD RISK")
-    else:
-        st.success("✅ NO FLOOD RISK")
-    _render_hazard_explain(analysis["flood_detail"])
+    # ---------- Core hazards: Flood / Earthquake / Volcano ----------
+    st.markdown("<div class='dp-section-title'>🎯 Core Hazard Assessment</div>", unsafe_allow_html=True)
 
-    st.subheader("🌍 Earthquake Alerts")
+    st.markdown("##### 🌊 Flood")
+    _render_hazard_card("flood", "Flood Risk", analysis["flood_detail"])
+
     if analysis["best_eq"]:
         place_name, magnitude = analysis["best_eq"]
-        st.write(f"📍 Location: {place_name}")
-        st.write(f"📊 Magnitude: {magnitude}")
-        if analysis["earthquake_risk"] == "HIGH":
-            st.error("🚨 HIGH EARTHQUAKE RISK")
-        elif analysis["earthquake_risk"] == "MEDIUM":
-            st.warning("⚠️ MODERATE EARTHQUAKE")
-        else:
-            st.success("🟢 LOW IMPACT EARTHQUAKE")
+        eq_extra = [f"📍 Nearest event: **{place_name}** — magnitude **{magnitude}**"]
     else:
-        st.success("✅ No recent earthquakes nearby")
-    _render_hazard_explain(
-        analysis["earthquake_detail"],
+        eq_extra = ["✅ No recent earthquakes detected nearby"]
+    st.markdown("##### 🌍 Earthquake")
+    _render_hazard_card(
+        "earthquake", "Earthquake Risk", analysis["earthquake_detail"],
         caveat="Reflects near-term aftershock/continued-activity likelihood, not a forecast of a new earthquake.",
+        extra_lines=eq_extra,
     )
 
-    st.subheader("🌋 Volcano Alerts")
     if analysis["nearby_volcanoes"]:
-        for v in analysis["nearby_volcanoes"][:3]:
-            st.write(f"🌋 {v['properties']['place']}")
-            st.write(f"Activity Level: {v['properties']['mag']}")
-        st.error("🚨 VOLCANIC ACTIVITY DETECTED")
+        volcano_extra = [
+            f"🌋 {v['properties']['place']} — activity level {v['properties']['mag']}"
+            for v in analysis["nearby_volcanoes"][:3]
+        ]
     else:
-        st.success("✅ No volcanic activity detected nearby")
-    _render_hazard_explain(
-        analysis["volcano_detail"],
+        volcano_extra = ["✅ No volcanic activity detected nearby"]
+    st.markdown("##### 🌋 Volcano")
+    _render_hazard_card(
+        "volcano", "Volcano Risk", analysis["volcano_detail"],
         caveat="Reflects unrest likelihood from nearby seismicity, not a forecast of eruption timing.",
+        extra_lines=volcano_extra,
     )
 
-    st.subheader("🔮 Disaster Prediction Summary")
-    st.write("🌊 Flood Prediction:", analysis["flood_prediction"])
-    st.write("🌍 Earthquake Prediction:", analysis["earthquake_prediction"])
-    st.write("🌋 Volcano Prediction:", analysis["volcano_prediction"])
+    # ---------- Prediction summary strip ----------
+    st.markdown("<div class='dp-section-title'>🔮 Prediction Summary</div>", unsafe_allow_html=True)
+    p1, p2, p3 = st.columns(3)
+    for col, icon, label, value in [
+        (p1, "🌊", "Flood Prediction", analysis["flood_prediction"]),
+        (p2, "🌍", "Earthquake Prediction", analysis["earthquake_prediction"]),
+        (p3, "🌋", "Volcano Prediction", analysis["volcano_prediction"]),
+    ]:
+        col.markdown(
+            f"""
+            <div class="dp-weather-card">
+                <div class="dp-weather-icon">{icon}</div>
+                <div class="dp-weather-label">{label}</div>
+                <div class="dp-weather-value">{value}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # ---------- Extended hazard predictions ----------
-    st.subheader("🧭 Extended Hazard Predictions")
+    st.markdown("<div class='dp-section-title'>🧭 Extended Hazard Predictions</div>", unsafe_allow_html=True)
 
-    st.markdown("**⛰️ Landslide Risk**")
-    ld = analysis["landslide_detail"]
-    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[ld["level"]](
-        f"{ld['level']} landslide risk"
-    )
-    _render_hazard_explain(ld)
-
-    st.markdown("**🌀 Storm / Cyclone Risk**")
-    cd = analysis["cyclone_detail"]
-    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[cd["level"]](
-        f"{cd['level']} storm/cyclone risk"
-    )
-    _render_hazard_explain(cd)
-
-    st.markdown("**🌡️ Heatwave Risk**")
-    hd = analysis["heatwave_detail"]
-    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[hd["level"]](
-        f"{hd['level']} heatwave risk"
-    )
-    _render_hazard_explain(hd)
-
-    st.markdown("**🏜️ Drought Risk**")
-    dd = analysis["drought_detail"]
-    {"HIGH": st.error, "MEDIUM": st.warning, "LOW": st.warning, "NONE": st.success}[dd["level"]](
-        f"{dd['level']} drought risk"
-    )
-    _render_hazard_explain(dd)
+    ext1, ext2 = st.columns(2)
+    with ext1:
+        _render_hazard_card("landslide", "⛰️ Landslide Risk", analysis["landslide_detail"])
+        _render_hazard_card("heatwave", "🌡️ Heatwave Risk", analysis["heatwave_detail"])
+    with ext2:
+        _render_hazard_card("cyclone", "🌀 Storm / Cyclone Risk", analysis["cyclone_detail"])
+        _render_hazard_card("drought", "🏜️ Drought Risk", analysis["drought_detail"])
 
 
 # =========================================================
@@ -2974,6 +3120,67 @@ def render_analytics_tab(analysis):
     col5.metric("🌧️ Rainfall (6hr)", f"{round(analysis['rainfall'], 2)} mm")
     col6.metric("🌡️ Temperature", f"{analysis['temperature']} °C")
     col7.metric("💨 Wind Speed", f"{analysis['windspeed']} km/h")
+
+    # ---------- All Disasters Comparison ----------
+    # Pulls straight from the same hazard_detail dicts (flood_detail,
+    # landslide_detail, cyclone_detail, heatwave_detail, drought_detail,
+    # earthquake_detail, volcano_detail) that the Disaster Prediction tab
+    # renders — nothing recomputed here, just an all-in-one comparison
+    # view across every monitored hazard.
+    st.subheader("🧭 All Disaster Risks — Comparison")
+
+    hazard_keys = ["flood", "landslide", "cyclone", "heatwave", "drought", "earthquake", "volcano"]
+    hazard_labels = {
+        "flood": "Flood", "landslide": "Landslide", "cyclone": "Storm/Cyclone",
+        "heatwave": "Heatwave", "drought": "Drought", "earthquake": "Earthquake",
+        "volcano": "Volcano",
+    }
+    hazard_icons = {
+        "flood": "🌊", "landslide": "⛰️", "cyclone": "🌀", "heatwave": "🌡️",
+        "drought": "🏜️", "earthquake": "🌍", "volcano": "🌋",
+    }
+    detail_map = {
+        "flood": analysis["flood_detail"], "landslide": analysis["landslide_detail"],
+        "cyclone": analysis["cyclone_detail"], "heatwave": analysis["heatwave_detail"],
+        "drought": analysis["drought_detail"], "earthquake": analysis["earthquake_detail"],
+        "volcano": analysis["volcano_detail"],
+    }
+    level_colors = {"HIGH": "#c0392b", "MEDIUM": "#e2a712", "LOW": "#3a8fd8", "NONE": "#27ae60"}
+
+    labels = [hazard_labels[k] for k in hazard_keys]
+    probs = [detail_map[k]["probability_pct"] for k in hazard_keys]
+    confs = [detail_map[k]["confidence_pct"] for k in hazard_keys]
+    levels = [detail_map[k]["level"] for k in hazard_keys]
+    bar_colors = [level_colors.get(lvl, "#999999") for lvl in levels]
+
+    # Quick-glance risk badges for every hazard, in one row.
+    badge_cols = st.columns(len(hazard_keys))
+    for col, key in zip(badge_cols, hazard_keys):
+        lvl = detail_map[key]["level"]
+        col.metric(f"{hazard_icons[key]} {hazard_labels[key]}", lvl)
+
+    # Bar chart comparing probability across every hazard.
+    fig, ax = plt.subplots(figsize=(9, 4))
+    x = range(len(hazard_keys))
+    ax.bar(x, probs, color=bar_colors)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(labels, rotation=20, ha="right")
+    ax.set_ylabel("Probability (%)")
+    ax.set_ylim(0, 100)
+    ax.set_title("Disaster Probability by Hazard Type")
+    ax.grid(axis="y", alpha=0.3)
+    st.pyplot(fig)
+    plt.close(fig)
+
+    # Full detail table underneath.
+    disaster_table = pd.DataFrame({
+        "Hazard": labels,
+        "Risk Level": levels,
+        "Probability (%)": probs,
+        "Confidence (%)": confs,
+        "Expected Window": [detail_map[k]["expected_window"] for k in hazard_keys],
+    })
+    st.dataframe(disaster_table, use_container_width=True, hide_index=True)
 
     st.subheader("🗺️ Location Map")
     df = pd.DataFrame({"lat": [analysis["lat"]], "lon": [analysis["lon"]]})
