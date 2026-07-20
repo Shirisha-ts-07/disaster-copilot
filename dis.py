@@ -9,6 +9,7 @@ import heapq
 import json
 import urllib.request
 import re
+from html import escape
 import concurrent.futures
 from io import BytesIO
 from math import radians, cos, sin, sqrt, atan2, pi
@@ -25,6 +26,572 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.graphics.shapes import Drawing, Circle, String
 from gtts import gTTS
 import pydeck as pdk
+
+_RESPONSE_CSS = """
+<style>
+/* ── Base ── */
+.er-container { font-family: 'Segoe UI', system-ui, sans-serif; }
+
+/* ── Hero Banner ── */
+.er-hero {
+    background: linear-gradient(135deg, #1a3c6e 0%, #2c5aa0 50%, #1a3c6e 100%);
+    border-radius: 16px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    color: white;
+    box-shadow: 0 8px 32px rgba(26,60,110,0.25);
+    position: relative;
+    overflow: hidden;
+}
+.er-hero::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 300px;
+    height: 300px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 50%;
+}
+.er-hero-title {
+    font-size: 1.3rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+}
+.er-hero-sub {
+    font-size: 0.88rem;
+    opacity: 0.85;
+    line-height: 1.5;
+}
+.er-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-top: 12px;
+}
+.er-hero-badge .pulse {
+    width: 8px;
+    height: 8px;
+    background: #2ecc71;
+    border-radius: 50%;
+    animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+    0% { box-shadow: 0 0 0 0 rgba(46,204,113,0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(46,204,113,0); }
+    100% { box-shadow: 0 0 0 0 rgba(46,204,113,0); }
+}
+
+/* ── Standby State ── */
+.er-standby {
+    background: linear-gradient(135deg, #27ae60, #1e8449);
+    border-radius: 16px;
+    padding: 28px;
+    color: white;
+    text-align: center;
+    box-shadow: 0 6px 24px rgba(39,174,96,0.25);
+}
+.er-standby-icon { font-size: 3rem; margin-bottom: 10px; }
+.er-standby-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+.er-standby-text { font-size: 0.88rem; opacity: 0.9; }
+
+/* ── Section Headers ── */
+.er-section-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #e8eef7;
+    margin: 28px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #2b3442;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── Resource Cards ── */
+.er-card {
+    background: #171a22;
+    border-radius: 14px;
+    border: 1px solid #2b3442;
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.16);
+    transition: all 0.2s ease;
+}
+.er-card:hover {
+    box-shadow: 0 10px 28px rgba(0,0,0,0.28);
+    transform: translateY(-1px);
+}
+.er-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.er-card-name {
+    font-weight: 750;
+    font-size: 1.0rem;
+    color: #f8fafc;
+    line-height: 1.3;
+}
+.er-card-type {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+.er-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.er-card-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: #cbd5e1;
+    background: #222936;
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+.er-card-address {
+    font-size: 0.82rem;
+    color: #a8b3c2;
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+/* ── Capacity Bars ── */
+.er-capacity-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.er-capacity-label {
+    font-size: 0.75rem;
+    color: #a8b3c2;
+    min-width: 90px;
+    flex-shrink: 0;
+}
+.er-capacity-track {
+    flex: 1;
+    height: 8px;
+    background: #303948;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.er-capacity-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+.er-capacity-fill-green { background: linear-gradient(90deg, #2ecc71, #27ae60); }
+.er-capacity-fill-yellow { background: linear-gradient(90deg, #f1c40f, #e2a712); }
+.er-capacity-fill-red { background: linear-gradient(90deg, #e74c3c, #c0392b); }
+.er-capacity-fill-blue { background: linear-gradient(90deg, #3498db, #2980b9); }
+.er-capacity-value {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #e8eef7;
+    min-width: 50px;
+    text-align: right;
+}
+
+/* ── Status Badge ── */
+.er-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 999px;
+    margin-top: 8px;
+}
+.er-status-operational { background: #e9f9ef; color: #1e8449; }
+.er-status-limited { background: #fdf3da; color: #8a6206; }
+.er-status-overwhelmed { background: #fdecea; color: #c0392b; }
+
+/* ── Source Badge ── */
+.er-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+.er-source-live { background: #123225; color: #86efac; border: 1px solid #286044; }
+.er-source-est { background: #252d3a; color: #cbd5e1; border: 1px solid #465365; }
+
+/* ── Quick Stats Row ── */
+.er-quickstats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin: 18px 0;
+}
+.er-stat-card {
+    background: #171a22;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    border: 1px solid #2b3442;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+}
+.er-stat-icon { font-size: 1.6rem; margin-bottom: 6px; }
+.er-stat-value { font-size: 1.3rem; font-weight: 800; color: #f8fafc; }
+.er-stat-label { font-size: 0.72rem; color: #a8b3c2; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* ── Route Cards ── */
+.er-route-card {
+    background: linear-gradient(135deg, #1c2430, #17202b);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 10px;
+    border-left: 4px solid #2c5aa0;
+}
+.er-route-title { font-weight: 700; font-size: 0.92rem; color: #f8fafc; margin-bottom: 4px; }
+.er-route-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #2c5aa0;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-top: 8px;
+    transition: background 0.2s;
+}
+.er-route-link:hover { background: #1a3c6e; }
+
+/* ── Safe Path ── */
+.er-safe-path {
+    background: linear-gradient(135deg, #123225, #163d2d);
+    border-radius: 12px;
+    padding: 16px 20px;
+    border: 1px solid #bfe8cf;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.er-safe-path-step {
+    background: #1f2937;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #86efac;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.er-safe-path-arrow { color: #27ae60; font-size: 1.2rem; font-weight: 700; }
+
+/* ── Expandable Sections ── */
+.er-expander-header {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #e8eef7;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.er-expander-count {
+    background: #eef2f7;
+    color: #5a6070;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: auto;
+}
+
+/* ── Ambulance Dispatch ── */
+.er-ambulance-card {
+    background: #171a22;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    border: 1px solid #2b3442;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.er-ambulance-name { font-weight: 700; font-size: 0.9rem; color: #f8fafc; }
+.er-ambulance-stats { display: flex; gap: 16px; }
+.er-ambulance-stat { text-align: center; }
+.er-ambulance-stat-num { font-size: 1.1rem; font-weight: 800; color: #2c5aa0; }
+.er-ambulance-stat-label { font-size: 0.68rem; color: #a8b3c2; text-transform: uppercase; }
+
+/* ── Disclaimer ── */
+.er-disclaimer {
+    background: #2b2414;
+    border: 1px solid #725d23;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.78rem;
+    color: #f5d58a;
+    line-height: 1.5;
+    margin-bottom: 18px;
+}
+</style>
+"""
+
+# ── Color & Icon Mappings ───────────────────────────────
+_RESOURCE_TYPE_STYLES = {
+    "Hospital":        {"color": "#c0392b", "bg": "#fdecea", "icon": "🏥"},
+    "Clinic":          {"color": "#c0392b", "bg": "#fdecea", "icon": "🏥"},
+    "Restaurant":      {"color": "#e67e22", "bg": "#fdf3da", "icon": "🍽️"},
+    "Cafe":            {"color": "#e67e22", "bg": "#fdf3da", "icon": "☕"},
+    "Fast Food":       {"color": "#e67e22", "bg": "#fdf3da", "icon": "🍔"},
+    "Marketplace":     {"color": "#e67e22", "bg": "#fdf3da", "icon": "🛒"},
+    "Supermarket":     {"color": "#e67e22", "bg": "#fdf3da", "icon": "🛒"},
+    "Food Resource":   {"color": "#e67e22", "bg": "#fdf3da", "icon": "🍞"},
+    "Food Distribution Center": {"color": "#e67e22", "bg": "#fdf3da", "icon": "📦"},
+    "Relief Shelter":  {"color": "#9b59b6", "bg": "#f3e8fd", "icon": "🏠"},
+    "Emergency Assembly Point": {"color": "#9b59b6", "bg": "#f3e8fd", "icon": "📍"},
+    "Ambulance Station": {"color": "#16a085", "bg": "#e8f8f5", "icon": "🚑"},
+    "Police Station":  {"color": "#2980b9", "bg": "#e8f2fc", "icon": "👮"},
+    "Fire Station":    {"color": "#d35400", "bg": "#fdeee0", "icon": "🚒"},
+    "Blood Bank":      {"color": "#e91e63", "bg": "#fce4ec", "icon": "🩸"},
+    "NGO / Aid Organization": {"color": "#27ae60", "bg": "#e9f9ef", "icon": "🤝"},
+    "Rescue Team":     {"color": "#1abc9c", "bg": "#e8f8f5", "icon": "🚁"},
+    "Community Kitchen": {"color": "#f1c40f", "bg": "#fdf3da", "icon": "🍲"},
+}
+
+_STATUS_CLASS = {
+    "Operational": "er-status-operational",
+    "Limited Capacity": "er-status-limited",
+    "Overwhelmed": "er-status-overwhelmed",
+}
+
+
+def _get_resource_style(resource_type):
+    return _RESOURCE_TYPE_STYLES.get(resource_type, {
+        "color": "#5a6070", "bg": "#f5f7fa", "icon": "📍"
+    })
+
+
+def _resource_display_name(name):
+    """Remove internal simulation suffixes from names shown to users."""
+    return re.sub(r"\s+\(\d+\)$", "", str(name)).strip()
+
+
+def _capacity_bar_html(label, current, total, color_class="er-capacity-fill-green"):
+    pct = min(100, max(0, round((current / total) * 100))) if total > 0 else 0
+    return (
+        f'<div class="er-capacity-row"><span class="er-capacity-label">{label}</span>'
+        f'<div class="er-capacity-track"><div class="er-capacity-fill {color_class}" style="width:{pct}%;"></div></div>'
+        f'<span class="er-capacity-value">{current}/{total}</span></div>'
+    )
+
+
+def _render_resource_card(r):
+    """Modern card-based resource display with visual capacity indicators."""
+    style = _get_resource_style(r.get("type", ""))
+    source_badge = (
+        '<span class="er-source er-source-live">🟢 Live Data</span>'
+        if r.get("source") == "live"
+        else '<span class="er-source er-source-est">🔧 Estimated</span>'
+    )
+    status = r.get("status", "Operational")
+    status_class = _STATUS_CLASS.get(status, "er-status-operational")
+    display_name = _resource_display_name(r.get("name", "Resource"))
+
+    # Build capacity bars based on resource type
+    capacity_html = ""
+    if "beds_available" in r:
+        occ_pct = r.get("occupancy_pct", 0)
+        bar_color = "er-capacity-fill-red" if occ_pct > 80 else "er-capacity-fill-yellow" if occ_pct > 50 else "er-capacity-fill-green"
+        capacity_html += _capacity_bar_html("Beds", r["beds_available"], r["capacity"], bar_color)
+        if "icu_beds" in r:
+            icu_pct = (r["icu_beds"] - r["icu_available"]) / r["icu_beds"] * 100 if r["icu_beds"] > 0 else 0
+            icu_color = "er-capacity-fill-red" if icu_pct > 80 else "er-capacity-fill-yellow" if icu_pct > 50 else "er-capacity-fill-blue"
+            capacity_html += _capacity_bar_html("ICU", r["icu_available"], r["icu_beds"], icu_color)
+    elif "fleet_size" in r:
+        avail = r.get("ambulances_available", 0)
+        bar_color = "er-capacity-fill-red" if avail < 2 else "er-capacity-fill-yellow" if avail < 4 else "er-capacity-fill-green"
+        capacity_html += _capacity_bar_html("Available", avail, r["fleet_size"], bar_color)
+    elif "current_occupants" in r:
+        free = max(0, r["capacity"] - r["current_occupants"])
+        bar_color = "er-capacity-fill-red" if free < 20 else "er-capacity-fill-yellow" if free < 50 else "er-capacity-fill-green"
+        capacity_html += _capacity_bar_html("Free Space", free, r["capacity"], bar_color)
+    elif "personnel" in r:
+        avail = max(0, r["personnel"] - r.get("deployed", 0))
+        bar_color = "er-capacity-fill-red" if avail < 5 else "er-capacity-fill-yellow" if avail < 15 else "er-capacity-fill-green"
+        capacity_html += _capacity_bar_html("Available", avail, r["personnel"], bar_color)
+    elif "blood_units_available" in r:
+        units = r["blood_units_available"]
+        bar_color = "er-capacity-fill-red" if units < 200 else "er-capacity-fill-yellow" if units < 500 else "er-capacity-fill-green"
+        capacity_html += _capacity_bar_html("Blood Units", units, max(units, 1000), bar_color)
+    elif "volunteers" in r:
+        avail = max(0, r["volunteers"] - r.get("deployed", 0))
+        bar_color = "er-capacity-fill-red" if avail < 5 else "er-capacity-fill-yellow" if avail < 15 else "er-capacity-fill-green"
+        capacity_html += _capacity_bar_html("Available", avail, r["volunteers"], bar_color)
+
+    # Contact & address
+    contact_html = ""
+    if r.get("contact"):
+        contact_html += f'<div class="er-card-meta-item">📞 {r["contact"]}</div>'
+    if r.get("address"):
+        contact_html += f'<div class="er-card-meta-item">📍 {r["address"][:60]}{"..." if len(r.get("address","")) > 60 else ""}</div>'
+    if r.get("last_updated"):
+        contact_html += f'<div class="er-card-meta-item">⟳ Updated {r["last_updated"]}</div>'
+
+    card_html = f"""<div class="er-card">
+        <div class="er-card-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:1.6rem;">{style["icon"]}</span>
+                <div>
+                    <div class="er-card-name">{display_name}</div>
+                    <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
+                        <span class="er-card-type" style="background:{style["bg"]};color:{style["color"]};">{r.get("type", "Resource")}</span>{source_badge}
+                    </div>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:0.85rem;font-weight:800;color:#f8fafc;">{r["distance_km"]} km</div>
+                <div style="font-size:0.72rem;color:#a8b3c2;">~{r.get("travel_time_min", "?")} min</div>
+            </div>
+        </div>
+        <div class="er-card-meta">{contact_html}</div>{capacity_html}
+        <span class="er-status {status_class}"><span style="width:7px;height:7px;border-radius:50%;background:currentColor;opacity:0.7;"></span>{status} ({r.get("occupancy_pct", "?")}% load)</span>
+    </div>"""
+    st.markdown(card_html, unsafe_allow_html=True)
+
+
+def _render_quick_stats(analysis):
+    """Summary statistics cards at the top of the response tab."""
+    resources = (
+        analysis["hospitals"] + analysis["food_places"] + analysis["shelters"]
+        + analysis["ambulance_stations"] + analysis["police_stations"]
+        + analysis["fire_stations"] + analysis["blood_banks"]
+        + analysis["ngos"] + analysis["rescue_teams"] + analysis["community_kitchens"]
+    )
+    live_count = sum(1 for r in resources if r.get("source") == "live")
+    est_count = len(resources) - live_count
+
+    # Count hospitals with limited/overwhelmed status
+    stressed = sum(1 for h in analysis["hospitals"] if h.get("status") in ["Limited Capacity", "Overwhelmed"])
+
+    stats = [
+        ("🏥", "Hospitals", len(analysis["hospitals"])),
+        ("🏠", "Shelters", len(analysis["shelters"])),
+        ("🚑", "Ambulance Stns", len(analysis["ambulance_stations"])),
+        ("🟢", "Live Sources", live_count),
+        ("🔧", "Est. Sources", est_count),
+        ("⚠️", "Stressed", stressed),
+    ]
+
+    cards_html = "".join(
+        f'<div class="er-stat-card"><div class="er-stat-icon">{icon}</div>'
+        f'<div class="er-stat-value">{value}</div><div class="er-stat-label">{label}</div></div>'
+        for icon, label, value in stats
+    )
+    st.markdown(f'<div class="er-quickstats">{cards_html}</div>', unsafe_allow_html=True)
+
+
+def _render_resource_group(title, icon, resources, expanded=False, error=None):
+    """Render one resource category in an isolated, consistently sized group."""
+    with st.expander(f"{icon} {title}  ·  {len(resources)} available", expanded=expanded):
+        if error and not resources:
+            st.error(f"⚠️ {error}")
+        if not resources:
+            st.caption(f"No {title.lower()} found for this response area.")
+            return
+
+        columns = st.columns(2)
+        for index, resource in enumerate(resources):
+            with columns[index % 2]:
+                _render_resource_card(resource)
+
+
+def _render_ambulance_section(ambulance_info):
+    """Clean ambulance dispatch cards."""
+    for a in ambulance_info:
+        available = a["total"] - a["dispatched"]
+        status_color = "#c0392b" if available < 2 else "#e2a712" if available < 4 else "#27ae60"
+        st.markdown(f"""
+        <div class="er-ambulance-card">
+            <div class="er-ambulance-name">🏥 {_resource_display_name(a["name"])}</div>
+            <div class="er-ambulance-stats">
+                <div class="er-ambulance-stat">
+                    <div class="er-ambulance-stat-num">{a["total"]}</div>
+                    <div class="er-ambulance-stat-label">Total</div>
+                </div>
+                <div class="er-ambulance-stat">
+                    <div class="er-ambulance-stat-num" style="color:{status_color};">{available}</div>
+                    <div class="er-ambulance-stat-label">Available</div>
+                </div>
+                <div class="er-ambulance-stat">
+                    <div class="er-ambulance-stat-num">{a["dispatched"]}</div>
+                    <div class="er-ambulance-stat-label">Dispatched</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def _render_route_section(analysis):
+    """Evacuation routes with styled cards."""
+    # Safe path
+    if analysis.get("safe_path"):
+        path_steps = ""
+        for i, step in enumerate(analysis["safe_path"]):
+            path_steps += f'<span class="er-safe-path-step">{step}</span>'
+            if i < len(analysis["safe_path"]) - 1:
+                path_steps += '<span class="er-safe-path-arrow">→</span>'
+        st.markdown(f"""
+        <div class="er-section-title">🛣️ Smart Safe Route</div>
+        <div class="er-safe-path">{path_steps}</div>
+        """, unsafe_allow_html=True)
+
+    # Google Maps evacuation route
+    if analysis.get("evacuation_url"):
+        st.markdown(f"""
+        <div class="er-route-card">
+            <div class="er-route-title">🗺️ Evacuation Route (Google Maps)</div>
+            <div style="font-size:0.8rem;color:#a8b3c2;">Navigate from your location to the nearest safe zone</div>
+            <a href="{analysis["evacuation_url"]}" target="_blank" class="er-route-link">
+                🗺️ Open in Google Maps
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Hospital routes
+    if analysis.get("hospital_routes"):
+        st.markdown('<div class="er-section-title">🚑 Ambulance Routes</div>', unsafe_allow_html=True)
+        for r in analysis["hospital_routes"][:3]:
+            st.markdown(f"""
+            <div class="er-route-card" style="border-left-color:#16a085;">
+                <div class="er-route-title">🚑 Route from {_resource_display_name(r["name"])}</div>
+                <a href="{r["url"]}" target="_blank" class="er-route-link" style="background:#16a085;">
+                    🗺️ View Route
+                </a>
+            </div>
+            """, unsafe_allow_html=True)
+
 
 # =========================================================
 #  LOGGING
@@ -461,14 +1028,18 @@ _HOME_CSS = """
 .dc-updated { text-align: right; color: #8a8f98; font-size: 0.8rem; padding-top: 6px; }
 .dc-legend-row { display: flex; align-items: center; gap: 18px; justify-content: center;
     margin-top: 10px; padding: 8px 4px; }
-.dc-legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #5a5f68; }
+.dc-legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #cbd5e1; }
 .dc-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
 .dc-side-heading { font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; }
 .dc-hotspot { display: flex; justify-content: space-between; align-items: center;
-    padding: 8px 12px; margin-bottom: 6px; border-radius: 8px; background: #f5f6f8;
+    padding: 8px 12px; margin-bottom: 6px; border-radius: 8px; background: #171a22; border: 1px solid #2b3442;
     font-size: 0.85rem; }
-.dc-hotspot-rank { color: #999; font-weight: 700; margin-right: 8px; }
-.dc-hotspot-score { font-weight: 700; color: #c0392b; }
+.dc-hotspot-rank { color: #94a3b8; font-weight: 700; margin-right: 8px; }
+.dc-hotspot-score { font-weight: 700; color: #fb7185; }
+.dc-location-card { margin-top: 10px; padding: 16px; border-radius: 12px; background: #171a22; border: 1px solid #2b3442; }
+.dc-location-name { color: #f8fafc; font-size: 1rem; font-weight: 800; }
+.dc-location-meta { color: #a8b3c2; font-size: .78rem; margin-top: 5px; line-height: 1.5; }
+.dc-location-risk { display: inline-block; margin-top: 12px; padding: 5px 11px; border-radius: 999px; background: #1d4ed8; color: #dbeafe; font-size: .75rem; font-weight: 800; }
 .dc-stat-box { margin-top: 14px; padding: 16px; border-radius: 10px;
     background: linear-gradient(135deg,#1a3c6e,#2c5aa0); color: white; text-align: center; }
 .dc-stat-num { font-size: 1.7rem; font-weight: 800; line-height: 1; }
@@ -481,10 +1052,10 @@ _HOME_CSS = """
 .dc-snapshot-risk { font-weight: 800; font-size: 0.9rem; padding: 5px 14px;
     border-radius: 20px; background: rgba(255,255,255,0.2); white-space: nowrap; }
 .dc-metric-card { border-radius: 12px; padding: 18px 12px; text-align: center;
-    border: 1px solid #e6e6e6; background: #fafafa; }
+    border: 1px solid #2b3442; background: #171a22; }
 .dc-metric-icon { font-size: 1.7rem; }
-.dc-metric-label { font-size: 0.78rem; color: #666; margin-top: 4px; }
-.dc-metric-value { font-size: 1.2rem; font-weight: 800; margin-top: 4px; color: #1a1a1a; }
+.dc-metric-label { font-size: 0.78rem; color: #cbd5e1; margin-top: 4px; }
+.dc-metric-value { font-size: 1.2rem; font-weight: 800; margin-top: 4px; color: #f8fafc; }
 .dc-risk-high { background: linear-gradient(135deg,#c0392b,#8e2418); border-color: #c0392b; }
 .dc-risk-high .dc-metric-label, .dc-risk-high .dc-metric-value { color: white; }
 .dc-risk-medium { background: linear-gradient(135deg,#f1c40f,#d4ac0d); border-color: #f1c40f; }
@@ -576,6 +1147,10 @@ NAME_POOLS = {
         "{district} Community Meal Center",
     ],
 }
+
+RESOURCE_LOCATION_LABELS = [
+    "Central", "North", "South", "East", "West", "Riverside", "Uptown", "Lakeside", "Hillside", "Airport",
+]
 
 MAX_SCATTER_RADIUS_KM = {
     "hospital": 15, "clinic": 10, "shelter": 12, "ambulance_station": 10,
@@ -676,7 +1251,8 @@ def _scatter_point(lat, lon, max_radius_km):
 def _pick_simulated_name(category, district, index):
     template = random.choice(NAME_POOLS.get(category, ["{district} Emergency Resource"]))
     name = template.format(district=district or "Local")
-    return f"{name} ({index})" if index > 1 else name
+    location_label = RESOURCE_LOCATION_LABELS[(index - 1) % len(RESOURCE_LOCATION_LABELS)]
+    return f"{name} — {location_label}"
 
 
 def generate_simulated_resource(category, lat, lon, district, severity, index):
@@ -727,6 +1303,14 @@ def augment_with_simulated(live_items, category, lat, lon, district, severity, m
         index += 1
 
     combined.sort(key=lambda r: r["distance_km"])
+    seen_names = {}
+    for resource in combined:
+        base_name = _resource_display_name(resource.get("name", "Resource"))
+        duplicate_number = seen_names.get(base_name, 0)
+        if duplicate_number:
+            label = RESOURCE_LOCATION_LABELS[duplicate_number % len(RESOURCE_LOCATION_LABELS)]
+            resource["name"] = f"{base_name} — {label}"
+        seen_names[base_name] = duplicate_number + 1
     return combined
 
 
@@ -1143,7 +1727,7 @@ def _build_resource_detail_table(a):
     )
 
 
-def _build_location_map_png(analysis, path="location_map.png"):
+def _build_location_map_png(analysis, path="location_map.png", dark_theme=False):
     """Self-contained (no external map tiles / API) location + resource
     map: distance-ring plot centered on the analyzed coordinates, with
     the disaster location marked and nearby resources overlaid by
@@ -1167,11 +1751,18 @@ def _build_location_map_png(analysis, path="location_map.png"):
         ("Kitchens", a.get("community_kitchens", []), "#f1c40f", "p"),
     ]
 
-    fig, ax = plt.subplots(figsize=(6.3, 6))
+    background = "#0f1117" if dark_theme else "white"
+    panel = "#171a22" if dark_theme else "white"
+    foreground = "#f8fafc" if dark_theme else "#111827"
+    muted = "#94a3b8" if dark_theme else "#666666"
+    grid_color = "#334155" if dark_theme else "#d6dbe1"
+    fig, ax = plt.subplots(figsize=(8.2, 6.2))
+    fig.patch.set_facecolor(background)
+    ax.set_facecolor(panel)
 
     for radius_km, style in [(5, ":"), (10, "--"), (20, "-")]:
-        ax.add_patch(RangeCircle((0, 0), radius_km, fill=False, linestyle=style, edgecolor="#bbbbbb", linewidth=1, zorder=1))
-        ax.text(0, radius_km + 0.4, f"{radius_km} km", fontsize=7, color="#999999", ha="center")
+        ax.add_patch(RangeCircle((0, 0), radius_km, fill=False, linestyle=style, edgecolor=muted, linewidth=1.2, alpha=.75, zorder=1))
+        ax.text(0, radius_km + 0.45, f"{radius_km} km", fontsize=8, color=muted, ha="center", fontweight="600")
 
     for label, items, color, marker in groups:
         if not items:
@@ -1182,23 +1773,30 @@ def _build_location_map_png(analysis, path="location_map.png"):
             dy = (r["lat"] - lat0) * 111.0
             xs.append(dx)
             ys.append(dy)
-        ax.scatter(xs, ys, c=color, marker=marker, s=45, label=label, edgecolors="white", linewidths=0.5, zorder=3)
+        ax.scatter(xs, ys, c=color, marker=marker, s=64, label=label, edgecolors=background, linewidths=1, alpha=.92, zorder=3)
 
-    ax.scatter([0], [0], c="#1a1a1a", marker="*", s=260, zorder=5, edgecolors="white", linewidths=1)
-    ax.annotate("Disaster Location", (0, 0), textcoords="offset points", xytext=(8, 8), fontsize=9, fontweight="bold")
+    ax.scatter([0], [0], c="#38bdf8", marker="*", s=300, zorder=5, edgecolors="white", linewidths=1.2)
+    ax.annotate("Disaster Location", (0, 0), textcoords="offset points", xytext=(10, 10), fontsize=10, color=foreground, fontweight="bold", bbox={"boxstyle": "round,pad=.3", "facecolor": panel, "edgecolor": "#38bdf8", "alpha": .9})
 
     extent = 22
     ax.set_xlim(-extent, extent)
     ax.set_ylim(-extent, extent)
     ax.set_aspect("equal")
-    ax.set_xlabel("East-West Distance (km)")
-    ax.set_ylabel("North-South Distance (km)")
-    ax.set_title(f"Location & Nearby Emergency Resources — {a['district']}")
+    ax.set_xlabel("East-West Distance (km)", color=muted, labelpad=8)
+    ax.set_ylabel("North-South Distance (km)", color=muted, labelpad=8)
+    ax.set_title(f"Location & Nearby Emergency Resources — {a['district']}", color=foreground, fontsize=15, fontweight="bold", pad=16)
     if any(items for _, items, _, _ in groups):
-        ax.legend(loc="upper left", fontsize=6.5, framealpha=0.9, ncol=2)
-    ax.grid(alpha=0.15)
+        legend = ax.legend(loc="upper left", fontsize=8, framealpha=.95, ncol=2, borderpad=.7, columnspacing=1.1)
+        legend.get_frame().set_facecolor("#1e293b" if dark_theme else "white")
+        legend.get_frame().set_edgecolor("#475569" if dark_theme else "#d1d5db")
+        for text in legend.get_texts():
+            text.set_color(foreground)
+    ax.tick_params(colors=muted, labelsize=9)
+    ax.grid(color=grid_color, alpha=.45, linewidth=.7)
+    for spine in ax.spines.values():
+        spine.set_color("#475569" if dark_theme else "#1f2937")
 
-    plt.tight_layout()
+    plt.tight_layout(pad=1.2)
     plt.savefig(path, dpi=150)
     plt.close(fig)
     return path
@@ -2543,14 +3141,32 @@ def render_home_tab(analysis):
                 auto_highlight=True,
                 highlight_color=[255, 255, 255, 90],
             )
+            map_layers = [geojson_layer]
+            if analysis is not None:
+                selected_location = pd.DataFrame([{
+                    "lat": analysis["lat"],
+                    "lon": analysis["lon"],
+                    "name": f"{analysis['district']}, {analysis['state']}",
+                    "risk_score": round(analysis["risk_score"], 1),
+                }])
+                map_layers.append(pdk.Layer(
+                    "ScatterplotLayer",
+                    selected_location,
+                    get_position="[lon, lat]",
+                    get_fill_color=[56, 189, 248, 230],
+                    get_line_color=[255, 255, 255, 255],
+                    get_radius=180000,
+                    line_width_min_pixels=2,
+                    pickable=True,
+                ))
             view_state = pdk.ViewState(latitude=20, longitude=0, zoom=1.3, pitch=0)
             st.pydeck_chart(
                 pdk.Deck(
-                    layers=[geojson_layer],
+                    layers=map_layers,
                     initial_view_state=view_state,
                     tooltip={"text": "{name}\nRisk score: {risk_score}"},
                 ),
-                use_container_width=True,
+                width="stretch",
             )
             st.markdown(
                 """
@@ -2564,19 +3180,15 @@ def render_home_tab(analysis):
             )
 
         with side_col:
-            st.markdown("<div class='dc-side-heading'>🌐 Today's Top Hotspots</div>", unsafe_allow_html=True)
-            top_countries = sorted(country_scores.items(), key=lambda kv: kv[1], reverse=True)[:5]
-            if top_countries:
-                for i, (name, score) in enumerate(top_countries, start=1):
-                    st.markdown(
-                        f"<div class='dc-hotspot'>"
-                        f"<span><span class='dc-hotspot-rank'>{i}.</span>{name}</span>"
-                        f"<span class='dc-hotspot-score'>{round(score, 1)}</span>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
+            if analysis is not None:
+                st.markdown("<div class='dc-side-heading'>📍 Analyzed Location</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='dc-location-card'><div class='dc-location-name'>{analysis['district']}</div><div class='dc-location-meta'>{analysis['state']}, {analysis['country']}<br>Lat {analysis['lat']} · Lon {analysis['lon']}</div><span class='dc-location-risk'>Overall Risk: {analysis['overall_risk']}</span></div>",
+                    unsafe_allow_html=True,
+                )
             else:
-                st.caption("No significant earthquakes recorded today.")
+                st.markdown("<div class='dc-side-heading'>📍 Analyzed Location</div>", unsafe_allow_html=True)
+                st.caption("Search for a place above to highlight it on the map and see its risk summary here.")
 
             st.markdown(
                 f"""
@@ -2667,22 +3279,22 @@ _PREDICTION_CSS = """
 .dp-alert-chip-title { font-weight: 700; font-size: 0.88rem; }
 .dp-alert-chip-meta { font-size: 0.72rem; opacity: 0.9; margin-top: 3px; }
 .dp-alert-clear {
-    border-radius: 12px; padding: 14px 18px; background: linear-gradient(135deg,#eafaf1,#d7f3e3);
-    border: 1px solid #bfe8cf; color: #1e6b3d; font-weight: 600; font-size: 0.9rem;
+    border-radius: 12px; padding: 14px 18px; background: linear-gradient(135deg,#123225,#163d2d);
+    border: 1px solid #286044; color: #86efac; font-weight: 600; font-size: 0.9rem;
     display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
 }
 .dp-section-title {
-    font-size: 1.05rem; font-weight: 800; margin: 26px 0 10px 0; color: #1a2b3c;
+    font-size: 1.05rem; font-weight: 800; margin: 26px 0 10px 0; color: #e8eef7;
     display: flex; align-items: center; gap: 8px;
 }
 .dp-info-pill {
-    display: inline-block; background: #eef2f7; color: #4a5568; font-size: 0.74rem;
+    display: inline-block; background: #252d3a; color: #cbd5e1; font-size: 0.74rem;
     padding: 3px 10px; border-radius: 999px; margin-bottom: 14px;
 }
 
 .dp-card {
     border-radius: 14px; border: 1px solid #e8eaee; padding: 16px 18px; margin-bottom: 14px;
-    background: #ffffff; box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+    background: #171a22; border-color: #2b3442; box-shadow: 0 8px 22px rgba(0,0,0,0.16);
 }
 .dp-card-high { border-left: 5px solid #c0392b; }
 .dp-card-medium { border-left: 5px solid #e2a712; }
@@ -2692,8 +3304,8 @@ _PREDICTION_CSS = """
 .dp-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .dp-card-heading { display: flex; align-items: center; gap: 10px; }
 .dp-card-icon { font-size: 1.5rem; line-height: 1; }
-.dp-card-name { font-weight: 750; font-size: 1.0rem; color: #1a2b3c; }
-.dp-card-window { font-size: 0.78rem; color: #7a8494; margin-top: 1px; }
+.dp-card-name { font-weight: 750; font-size: 1.0rem; color: #f8fafc; }
+.dp-card-window { font-size: 0.78rem; color: #a8b3c2; margin-top: 1px; }
 
 .dp-badge {
     font-size: 0.72rem; font-weight: 800; padding: 4px 12px; border-radius: 999px;
@@ -2705,8 +3317,8 @@ _PREDICTION_CSS = """
 .dp-badge-none { background: #e9f9ef; color: #1e8449; border: 1px solid #bfe8cf; }
 
 .dp-bar-row { margin-top: 12px; }
-.dp-bar-label { display: flex; justify-content: space-between; font-size: 0.74rem; color: #6b7280; margin-bottom: 4px; }
-.dp-bar-track { background: #eef1f5; border-radius: 6px; height: 9px; overflow: hidden; }
+.dp-bar-label { display: flex; justify-content: space-between; font-size: 0.74rem; color: #cbd5e1; margin-bottom: 4px; }
+.dp-bar-track { background: #303948; border-radius: 6px; height: 9px; overflow: hidden; }
 .dp-bar-fill { height: 100%; border-radius: 6px; }
 .dp-bar-fill-high { background: linear-gradient(90deg,#e0574a,#c0392b); }
 .dp-bar-fill-medium { background: linear-gradient(90deg,#f0c04d,#e2a712); }
@@ -2716,12 +3328,12 @@ _PREDICTION_CSS = """
 
 .dp-weather-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 12px; margin-bottom: 6px; }
 .dp-weather-card {
-    border-radius: 12px; padding: 14px; text-align: center; background: #f7f9fc;
-    border: 1px solid #e8eaee;
+    border-radius: 12px; padding: 14px; text-align: center; background: #171a22;
+    border: 1px solid #2b3442;
 }
 .dp-weather-icon { font-size: 1.5rem; }
-.dp-weather-label { font-size: 0.72rem; color: #7a8494; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
-.dp-weather-value { font-size: 1.15rem; font-weight: 800; color: #1a2b3c; margin-top: 2px; }
+.dp-weather-label { font-size: 0.72rem; color: #a8b3c2; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+.dp-weather-value { font-size: 1.15rem; font-weight: 800; color: #f8fafc; margin-top: 2px; }
 </style>
 """
 
@@ -2740,12 +3352,10 @@ def _dp_badge_html(level):
 
 def _dp_bar_html(label, pct, cls):
     pct = max(0, min(100, pct))
-    return f"""
-    <div class="dp-bar-row">
-        <div class="dp-bar-label"><span>{label}</span><span>{pct}%</span></div>
-        <div class="dp-bar-track"><div class="dp-bar-fill dp-bar-fill-{cls}" style="width:{pct}%;"></div></div>
-    </div>
-    """
+    return (
+        f'<div class="dp-bar-row"><div class="dp-bar-label"><span>{label}</span><span>{pct}%</span></div>'
+        f'<div class="dp-bar-track"><div class="dp-bar-fill dp-bar-fill-{cls}" style="width:{pct}%;"></div></div></div>'
+    )
 
 
 def _render_hazard_explain(detail, caveat=None):
@@ -2961,36 +3571,65 @@ def render_resource_card(r):
 
 
 def render_response_tab(analysis):
+    """Improved Emergency Response tab with modern card-based UI,
+    visual capacity indicators, and better information hierarchy."""
+    st.markdown(_RESPONSE_CSS, unsafe_allow_html=True)
+
     if analysis is None:
         st.info("Run an analysis from the input above to see emergency response options here.")
         return
 
     if not analysis["mas_active"]:
-        st.success("✅ Risk levels are low — emergency response system is on standby.")
+        st.markdown("""
+        <div class="er-standby">
+            <div class="er-standby-icon">✅</div>
+            <div class="er-standby-title">Emergency Response on Standby</div>
+            <div class="er-standby-text">Risk levels are currently low. The emergency response system remains on standby.<br>No immediate mobilization is required.</div>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
-    st.subheader("🤖 Emergency Response System Activated")
-    st.caption(
-        "📡 Locations marked **🟢 Live** come from OpenStreetMap. Where live coverage is "
-        "sparse, entries marked **🔧 Estimated** fill the gap with modeled data so response "
-        "planning isn't blocked. Capacity/status figures (beds, ambulances, occupancy) are "
-        "always modeled — no public feed provides real-time facility status."
-    )
+    # ── Hero Banner ──
+    st.markdown(f"""
+    <div class="er-hero">
+        <div class="er-hero-title">🚨 Emergency Response System Activated</div>
+        <div class="er-hero-sub">
+            Real-time resource coordination for <b>{analysis['district']}, {analysis['state']}</b><br>
+            Overall Risk: <b>{analysis['overall_risk']}</b> · Risk Score: <b>{round(analysis['risk_score'], 1)}</b>
+        </div>
+        <div class="er-hero-badge">
+            <span class="pulse"></span>
+            Live Monitoring Active
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ---------- Hospitals ----------
-    st.subheader("🏥 Nearby Hospitals & Clinics")
-    if analysis.get("hospital_error") and not analysis["hospitals"]:
-        st.error(f"⚠️ {analysis['hospital_error']}")
-    for h in analysis["hospitals"][:5]:
-        render_resource_card(h)
+    # ── Disclaimer ──
+    st.markdown("""
+    <div class="er-disclaimer">
+        <b>📡 Data Source Notice:</b> Locations marked <b>🟢 Live</b> are sourced from OpenStreetMap. 
+        Where live coverage is sparse, <b>🔧 Estimated</b> entries fill gaps with modeled data. 
+        Capacity figures (beds, ambulances, occupancy) are always modeled — no public real-time feed exists for facility status.
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ---------- Map of all resources ----------
+    # ── Quick Stats ──
+    _render_quick_stats(analysis)
+
+    # ── Resource Map ──
     category_colors = {
         "Hospital": [220, 30, 30], "Clinic": [220, 30, 30],
-        "Food Distribution Center": [255, 165, 0], "Relief Shelter": [150, 50, 200],
-        "Ambulance Station": [0, 200, 200], "Police Station": [30, 90, 220],
-        "Fire Station": [230, 90, 20], "Blood Bank": [230, 20, 120],
-        "NGO / Aid Organization": [50, 160, 60], "Rescue Team": [90, 200, 90],
+        "Restaurant": [255, 165, 0], "Cafe": [255, 165, 0],
+        "Fast Food": [255, 165, 0], "Marketplace": [255, 165, 0],
+        "Supermarket": [255, 165, 0], "Food Resource": [255, 165, 0],
+        "Food Distribution Center": [255, 165, 0],
+        "Relief Shelter": [150, 50, 200], "Emergency Assembly Point": [150, 50, 200],
+        "Ambulance Station": [0, 200, 200],
+        "Police Station": [30, 90, 220],
+        "Fire Station": [230, 90, 20],
+        "Blood Bank": [230, 20, 120],
+        "NGO / Aid Organization": [50, 160, 60],
+        "Rescue Team": [90, 200, 90],
         "Community Kitchen": [200, 180, 30],
     }
     all_resource_lists = (
@@ -3000,126 +3639,136 @@ def render_response_tab(analysis):
         + analysis["ngos"][:4] + analysis["rescue_teams"][:4] + analysis["community_kitchens"][:4]
     )
     map_points = [
-        {"name": r["name"], "lat": r["lat"], "lon": r["lon"],
+        {"name": _resource_display_name(r["name"]), "lat": r["lat"], "lon": r["lon"],
          "color": category_colors.get(r["type"], [120, 120, 120]), "kind": r["type"]}
         for r in all_resource_lists
     ]
 
     if map_points:
-        st.subheader("🗺️ Emergency Resources Map")
+        st.markdown('<div class="er-section-title">🗺️ Emergency Resources Map</div>', unsafe_allow_html=True)
         points_df = pd.DataFrame(map_points)
         user_df = pd.DataFrame([{"lat": analysis["lat"], "lon": analysis["lon"]}])
 
         resource_layer = pdk.Layer(
             "ScatterplotLayer", points_df,
-            get_position="[lon, lat]", get_fill_color="color", get_radius=250, pickable=True,
+            get_position="[lon, lat]", get_fill_color="color", get_radius=280, pickable=True,
         )
         user_layer = pdk.Layer(
             "ScatterplotLayer", user_df,
-            get_position="[lon, lat]", get_fill_color=[30, 90, 220], get_radius=350,
+            get_position="[lon, lat]", get_fill_color=[30, 90, 220], get_radius=400,
         )
         view_state = pdk.ViewState(latitude=analysis["lat"], longitude=analysis["lon"], zoom=10)
         st.pydeck_chart(pdk.Deck(
             layers=[resource_layer, user_layer], initial_view_state=view_state,
             tooltip={"text": "{name} ({kind})"},
         ))
-        st.caption("🔵 Your location — other colors correspond to each resource type shown below.")
+        st.caption("🔵 Your location — colors correspond to resource types shown below.")
 
-    # ---------- Ambulance dispatch ----------
-    st.subheader("🚑 Ambulance Dispatch System")
-    for a in analysis["ambulance_info"]:
-        st.write(f"🏥 {a['name']}")
-        st.write(f"🚑 Total Ambulances: {a['total']}")
-        st.write(f"🚨 Dispatched: {a['dispatched']}")
+    # ── Routes first: evacuation guidance and hospital access ──
+    _render_route_section(analysis)
 
-    if analysis["hospital_routes"]:
-        st.subheader("🚗 Ambulance Routes")
-        for r in analysis["hospital_routes"]:
-            st.markdown(f"[🚑 View Ambulance Route from {r['name']}]({r['url']})")
+    # ── Separate resource groups ──
+    _render_resource_group("Hospitals & Clinics", "🏥", analysis["hospitals"], expanded=True, error=analysis.get("hospital_error"))
+    _render_resource_group("Food & Relief", "🍞", analysis["food_places"], expanded=True, error=analysis.get("food_error"))
+    _render_resource_group("Shelters & Evacuation Centers", "🏠", analysis["shelters"], expanded=True)
+    _render_resource_group("Ambulance Stations", "🚑", analysis["ambulance_stations"])
+    _render_resource_group("Police Stations", "👮", analysis["police_stations"])
+    _render_resource_group("Fire Stations", "🚒", analysis["fire_stations"])
+    _render_resource_group("Blood Banks", "🩸", analysis["blood_banks"])
+    _render_resource_group("NGOs & Aid Organizations", "🤝", analysis["ngos"])
+    _render_resource_group("Rescue Teams", "🚁", analysis["rescue_teams"])
+    _render_resource_group("Community Kitchens", "🍲", analysis["community_kitchens"])
 
-    st.subheader("🚗 Safe Evacuation Route (Google Maps)")
-    st.markdown(f"[🗺️ Open Route in Google Maps]({analysis['evacuation_url']})")
-
-    st.subheader("🧠 Smart Safe Route")
-    st.success(" → ".join(analysis["safe_path"]))
-
-    # ---------- Food resources ----------
-    st.subheader("🍞 Food Resources")
-    if analysis.get("food_error") and not analysis["food_places"]:
-        st.error(f"⚠️ {analysis['food_error']}")
-    for f in analysis["food_places"][:5]:
-        render_resource_card(f)
-
-    # ---------- Additional emergency resource categories ----------
-    with st.expander("🏚️ Shelters & Evacuation Centers"):
-        for r in analysis["shelters"][:6]:
-            render_resource_card(r)
-
-    with st.expander("🚑 Ambulance Stations"):
-        for r in analysis["ambulance_stations"][:6]:
-            render_resource_card(r)
-
-    with st.expander("👮 Police & 🚒 Fire Stations"):
-        st.write("**Police Stations**")
-        for r in analysis["police_stations"][:4]:
-            render_resource_card(r)
-        st.write("**Fire Stations**")
-        for r in analysis["fire_stations"][:4]:
-            render_resource_card(r)
-
-    with st.expander("🩸 Blood Banks"):
-        for r in analysis["blood_banks"][:4]:
-            render_resource_card(r)
-
-    with st.expander("🤝 NGOs & Rescue Teams"):
-        st.write("**NGOs / Aid Organizations**")
-        for r in analysis["ngos"][:4]:
-            render_resource_card(r)
-        st.write("**Rescue Teams**")
-        for r in analysis["rescue_teams"][:4]:
-            render_resource_card(r)
-
-    with st.expander("🍲 Community Kitchens"):
-        for r in analysis["community_kitchens"][:4]:
-            render_resource_card(r)
+    # ── Dispatch, routes, and coordination ──
+    if analysis.get("ambulance_info"):
+        st.markdown('<div class="er-section-title">🚑 Ambulance Dispatch System</div>', unsafe_allow_html=True)
+        _render_ambulance_section(analysis["ambulance_info"])
 
 
 # =========================================================
 #  RENDER: ANALYTICS TAB
 # =========================================================
+_ANALYTICS_CSS = """
+<style>
+.an-hero { background: linear-gradient(135deg,#172554,#1e3a8a 55%,#0f766e); border-radius: 18px; padding: 24px 28px; color: white; margin-bottom: 18px; box-shadow: 0 8px 26px rgba(15,23,42,.22); }
+.an-hero-top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; }
+.an-hero-title { font-size:1.35rem; font-weight:800; }
+.an-hero-sub { font-size:.85rem; opacity:.82; margin-top:5px; }
+.an-hero-score { text-align:right; }
+.an-hero-score-value { font-size:2rem; font-weight:900; line-height:1; }
+.an-hero-score-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; opacity:.78; margin-top:5px; }
+.an-kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:16px 0 24px; }
+.an-kpi { background:#171a22; border:1px solid #2b3240; border-radius:14px; padding:15px 16px; }
+.an-kpi-label { color:#9ca8ba; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; }
+.an-kpi-value { color:#f8fafc; font-size:1.35rem; font-weight:800; margin-top:5px; }
+.an-kpi-note { color:#7f8da3; font-size:.72rem; margin-top:3px; }
+.an-section { color:#f8fafc; font-size:1.05rem; font-weight:800; margin:24px 0 10px; }
+.an-alert { background:#291b1b; border:1px solid #713f3f; color:#fecaca; border-radius:11px; padding:13px 16px; margin:8px 0; font-size:.84rem; }
+.an-alert-head { display:flex; justify-content:space-between; gap:12px; font-weight:800; color:#fff1f2; }
+.an-alert-meta { color:#fda4af; font-size:.75rem; margin-top:5px; }
+.an-alert-detail { color:#fecdd3; line-height:1.5; margin-top:8px; }
+.an-alert-actions { color:#fed7aa; line-height:1.5; margin-top:7px; }
+@media (max-width: 800px) { .an-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+</style>
+"""
+
+
 def render_analytics_tab(analysis):
     if analysis is None:
         st.info("Run an analysis from the input above to see analytics here.")
         return
 
-    col3, col4 = st.columns(2)
-    with col3:
-        st.subheader("📈 Rainfall Trend (Next 24 Hours)")
-        plt.figure()
-        plt.plot(analysis["rain_24h"])
-        plt.xlabel("Time (Hours)")
-        plt.ylabel("Rainfall (mm)")
-        plt.title("Rainfall Forecast")
-        plt.grid()
-        st.pyplot(plt)
-        plt.close()
+    st.markdown(_ANALYTICS_CSS, unsafe_allow_html=True)
 
-    with col4:
-        st.subheader("🌡️ Temperature Trend (Next 24 Hours)")
-        plt.figure()
-        plt.plot(analysis["temp_24h"])
-        plt.xlabel("Time (Hours)")
-        plt.ylabel("Temperature (°C)")
-        plt.title("Temperature Forecast")
-        plt.grid()
-        st.pyplot(plt)
-        plt.close()
+    overall = analysis["overall_risk"]
+    warning_count = len(analysis.get("early_warning_alerts", []))
+    rain_series = analysis.get("rain_24h") or []
+    temp_series = analysis.get("temp_24h") or []
+    peak_rain = max(rain_series, default=0)
+    temp_range = (max(temp_series) - min(temp_series)) if temp_series else 0
 
-    st.subheader("🌍 Weather Dashboard")
-    col5, col6, col7 = st.columns(3)
-    col5.metric("🌧️ Rainfall (6hr)", f"{round(analysis['rainfall'], 2)} mm")
-    col6.metric("🌡️ Temperature", f"{analysis['temperature']} °C")
-    col7.metric("💨 Wind Speed", f"{analysis['windspeed']} km/h")
+    st.markdown(
+        f"<div class='an-hero'><div class='an-hero-top'><div><div class='an-hero-title'>📊 Analytics Overview</div><div class='an-hero-sub'>Live conditions for {analysis['district']}, {analysis['state']} · {analysis['current_date']} {analysis['current_time']}</div></div><div class='an-hero-score'><div class='an-hero-score-value'>{overall}</div><div class='an-hero-score-label'>Overall Risk · {round(analysis['risk_score'], 1)} score</div></div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"<div class='an-kpi-grid'><div class='an-kpi'><div class='an-kpi-label'>🌧️ Rainfall · 6 hours</div><div class='an-kpi-value'>{round(analysis['rainfall'], 1)} mm</div><div class='an-kpi-note'>Peak next 24h: {round(peak_rain, 1)} mm</div></div><div class='an-kpi'><div class='an-kpi-label'>🌡️ Current temperature</div><div class='an-kpi-value'>{analysis['temperature']} °C</div><div class='an-kpi-note'>Forecast range: {round(temp_range, 1)} °C</div></div><div class='an-kpi'><div class='an-kpi-label'>💨 Wind speed</div><div class='an-kpi-value'>{analysis['windspeed']} km/h</div><div class='an-kpi-note'>{'Rain detected' if analysis['is_raining'] else 'No rain detected'}</div></div><div class='an-kpi'><div class='an-kpi-label'>⚠️ Active warnings</div><div class='an-kpi-value'>{warning_count}</div><div class='an-kpi-note'>Across monitored hazards</div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div class='an-section'>📈 24-Hour Weather Forecast</div>", unsafe_allow_html=True)
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+        fig, ax = plt.subplots(figsize=(7, 3.4))
+        fig.patch.set_facecolor("#0f1117")
+        ax.set_facecolor("#171a22")
+        ax.plot(range(len(rain_series)), rain_series, color="#38bdf8", linewidth=2.5, marker="o", markersize=3)
+        ax.fill_between(range(len(rain_series)), rain_series, color="#38bdf8", alpha=.12)
+        ax.set_title("Rainfall forecast", color="white", loc="left", fontsize=12, fontweight="bold")
+        ax.set_xlabel("Hours ahead", color="#9ca8ba")
+        ax.set_ylabel("Millimetres", color="#9ca8ba")
+        ax.tick_params(colors="#9ca8ba")
+        ax.grid(axis="y", color="#334155", alpha=.45)
+        for spine in ax.spines.values():
+            spine.set_color("#334155")
+        st.pyplot(fig, width="stretch")
+        plt.close(fig)
+    with chart_col2:
+        fig, ax = plt.subplots(figsize=(7, 3.4))
+        fig.patch.set_facecolor("#0f1117")
+        ax.set_facecolor("#171a22")
+        ax.plot(range(len(temp_series)), temp_series, color="#fb923c", linewidth=2.5, marker="o", markersize=3)
+        ax.fill_between(range(len(temp_series)), temp_series, color="#fb923c", alpha=.12)
+        ax.set_title("Temperature forecast", color="white", loc="left", fontsize=12, fontweight="bold")
+        ax.set_xlabel("Hours ahead", color="#9ca8ba")
+        ax.set_ylabel("Degrees Celsius", color="#9ca8ba")
+        ax.tick_params(colors="#9ca8ba")
+        ax.grid(axis="y", color="#334155", alpha=.45)
+        for spine in ax.spines.values():
+            spine.set_color("#334155")
+        st.pyplot(fig, width="stretch")
+        plt.close(fig)
 
     # ---------- All Disasters Comparison ----------
     # Pulls straight from the same hazard_detail dicts (flood_detail,
@@ -3127,7 +3776,7 @@ def render_analytics_tab(analysis):
     # earthquake_detail, volcano_detail) that the Disaster Prediction tab
     # renders — nothing recomputed here, just an all-in-one comparison
     # view across every monitored hazard.
-    st.subheader("🧭 All Disaster Risks — Comparison")
+    st.markdown("<div class='an-section'>🧭 Risk Profile by Hazard</div>", unsafe_allow_html=True)
 
     hazard_keys = ["flood", "landslide", "cyclone", "heatwave", "drought", "earthquake", "volcano"]
     hazard_labels = {
@@ -3153,22 +3802,26 @@ def render_analytics_tab(analysis):
     levels = [detail_map[k]["level"] for k in hazard_keys]
     bar_colors = [level_colors.get(lvl, "#999999") for lvl in levels]
 
-    # Quick-glance risk badges for every hazard, in one row.
-    badge_cols = st.columns(len(hazard_keys))
-    for col, key in zip(badge_cols, hazard_keys):
-        lvl = detail_map[key]["level"]
-        col.metric(f"{hazard_icons[key]} {hazard_labels[key]}", lvl)
-
-    # Bar chart comparing probability across every hazard.
-    fig, ax = plt.subplots(figsize=(9, 4))
-    x = range(len(hazard_keys))
-    ax.bar(x, probs, color=bar_colors)
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(labels, rotation=20, ha="right")
-    ax.set_ylabel("Probability (%)")
+    # Probability and confidence are shown together so the chart communicates
+    # both the forecast signal and how strongly the model supports it.
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    fig.patch.set_facecolor("#0f1117")
+    ax.set_facecolor("#171a22")
+    x = list(range(len(hazard_keys)))
+    width = .36
+    ax.bar([i - width / 2 for i in x], probs, width=width, color=bar_colors, label="Probability")
+    ax.bar([i + width / 2 for i in x], confs, width=width, color="#94a3b8", alpha=.72, label="Confidence")
+    ax.set_xticks(x)
+    chart_labels = [hazard_labels[k].replace("Storm/Cyclone", "Storm\nCyclone") for k in hazard_keys]
+    ax.set_xticklabels(chart_labels, rotation=0, ha="center")
+    ax.set_ylabel("Percent", color="#cbd5e1")
     ax.set_ylim(0, 100)
-    ax.set_title("Disaster Probability by Hazard Type")
-    ax.grid(axis="y", alpha=0.3)
+    ax.legend(frameon=False, labelcolor="white")
+    ax.grid(axis="y", color="#334155", alpha=.45)
+    ax.tick_params(colors="#9ca8ba", axis="y")
+    ax.tick_params(axis="x", colors="#cbd5e1", labelsize=9, pad=8)
+    for spine in ax.spines.values():
+        spine.set_color("#334155")
     st.pyplot(fig)
     plt.close(fig)
 
@@ -3180,11 +3833,31 @@ def render_analytics_tab(analysis):
         "Confidence (%)": confs,
         "Expected Window": [detail_map[k]["expected_window"] for k in hazard_keys],
     })
-    st.dataframe(disaster_table, use_container_width=True, hide_index=True)
+    st.dataframe(disaster_table, width="stretch", hide_index=True)
 
-    st.subheader("🗺️ Location Map")
-    df = pd.DataFrame({"lat": [analysis["lat"]], "lon": [analysis["lon"]]})
-    st.map(df)
+    if analysis.get("early_warning_alerts"):
+        st.markdown("<div class='an-section'>🚨 Early-Warning Alerts</div>", unsafe_allow_html=True)
+        for alert in analysis["early_warning_alerts"]:
+            if isinstance(alert, dict):
+                hazard = escape(str(alert.get("hazard", "Hazard")))
+                level = escape(str(alert.get("level", "WARNING")))
+                probability = escape(str(alert.get("probability_pct", "—")))
+                confidence = escape(str(alert.get("confidence_pct", "—")))
+                window = escape(str(alert.get("window", "Monitor conditions")))
+                reasons = " • ".join(escape(str(reason)) for reason in alert.get("reasons", []))
+                actions = " • ".join(escape(str(action)) for action in alert.get("actions", []))
+                alert_html = (
+                    f"<div class='an-alert'><div class='an-alert-head'><span>⚠️ {hazard}</span><span>{level}</span></div>"
+                    f"<div class='an-alert-meta'>Probability {probability}% · Confidence {confidence}% · {window}</div>"
+                    f"<div class='an-alert-detail'><b>Why:</b> {reasons}</div>"
+                    f"<div class='an-alert-actions'><b>Recommended:</b> {actions}</div></div>"
+                )
+            else:
+                alert_html = f"<div class='an-alert'>⚠️ {escape(str(alert))}</div>"
+            st.markdown(alert_html, unsafe_allow_html=True)
+
+    st.markdown("<div class='an-section'>🗺️ Location & Resource Context</div>", unsafe_allow_html=True)
+    st.image(_build_location_map_png(analysis, dark_theme=True), width="stretch")
 
 
 # =========================================================
@@ -3195,7 +3868,14 @@ def render_report_tab(analysis):
         st.info("Run an analysis from the input above to generate a report.")
         return
 
-    st.subheader("📄 Disaster Analysis Report")
+    st.markdown(
+        "<style>.report-hero{background:linear-gradient(135deg,#172554,#1e3a8a 55%,#0f766e);border-radius:18px;padding:22px 26px;color:white;margin-bottom:18px}.report-title{font-size:1.3rem;font-weight:800}.report-sub{font-size:.85rem;opacity:.82;margin-top:5px}.report-panel{background:#171a22;border:1px solid #2b3442;border-radius:14px;padding:16px;color:#cbd5e1;margin-bottom:14px}.report-panel-title{color:#f8fafc;font-weight:800;margin-bottom:5px}[data-testid='stDownloadButton'] button{border-radius:10px;border:1px solid #3b82f6;background:#1d4ed8;color:white;font-weight:700}[data-testid='stDownloadButton'] button:hover{background:#2563eb;border-color:#60a5fa}</style>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<div class='report-hero'><div class='report-title'>📄 Disaster Analysis Report</div><div class='report-sub'>{analysis['district']}, {analysis['state']} · {analysis['current_date']} {analysis['current_time']}</div></div>",
+        unsafe_allow_html=True,
+    )
     # st.text_area("Report Summary", analysis["report_text"], height=300)
 
     try:
@@ -3205,22 +3885,14 @@ def render_report_tab(analysis):
         pdf_bytes = None
 
     if pdf_bytes:
-        st.download_button(
-            label="📄 Download PDF Report",
-            data=pdf_bytes,
-            file_name="disaster_report.pdf",
-            mime="application/pdf",
-        )
+        st.markdown("<div class='report-panel'><div class='report-panel-title'>📑 Full PDF report</div>Complete analysis with charts, hazards, recommendations, and emergency resources.</div>", unsafe_allow_html=True)
+        st.download_button(label="📄 Download PDF Report", data=pdf_bytes, file_name="disaster_report.pdf", mime="application/pdf")
 
     try:
         audio_bytes = generate_audio_report(analysis)
+        st.markdown("<div class='report-panel'><div class='report-panel-title'>🎧 Audio briefing</div>Listen to a spoken summary of the same analysis.</div>", unsafe_allow_html=True)
         st.audio(audio_bytes, format="audio/mpeg")
-        st.download_button(
-            label="🎵 Download Audio Report",
-            data=audio_bytes,
-            file_name="disaster_audio_report.mp3",
-            mime="audio/mpeg",
-        )
+        st.download_button(label="🎵 Download Audio Report", data=audio_bytes, file_name="disaster_audio_report.mp3", mime="audio/mpeg")
     except Exception as e:
         log_error("Error generating or playing audio report.", exc=e)
 
