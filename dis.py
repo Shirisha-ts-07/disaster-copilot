@@ -7,6 +7,7 @@ import logging
 import random
 import heapq
 import json
+import os
 import urllib.request
 import re
 from html import escape
@@ -1166,9 +1167,32 @@ SEVERITY_PROFILES = {
     "LOW":    {"count_range": (2, 4),  "occupancy_range": (15, 50), "status_weights": [0.80, 0.18, 0.02]},
 }
 
+RESOURCE_COUNT_RANGES = {
+    "HIGH": {
+        "hospital": (2, 4), "food_distribution_center": (2, 4), "shelter": (2, 4),
+        "ambulance_station": (1, 3), "police_station": (1, 3), "fire_station": (1, 3),
+        "blood_bank": (1, 2), "ngo": (1, 3), "rescue_team": (1, 3), "community_kitchen": (1, 3),
+    },
+    "MEDIUM": {
+        "hospital": (1, 3), "food_distribution_center": (1, 3), "shelter": (1, 3),
+        "ambulance_station": (1, 2), "police_station": (1, 2), "fire_station": (1, 2),
+        "blood_bank": (1, 2), "ngo": (1, 2), "rescue_team": (1, 2), "community_kitchen": (1, 2),
+    },
+    "LOW": {
+        "hospital": (1, 2), "food_distribution_center": (1, 2), "shelter": (1, 2),
+        "ambulance_station": (1, 1), "police_station": (1, 1), "fire_station": (1, 1),
+        "blood_bank": (1, 1), "ngo": (1, 1), "rescue_team": (1, 1), "community_kitchen": (1, 1),
+    },
+}
+
 
 def get_severity_profile(severity):
     return SEVERITY_PROFILES.get(severity, SEVERITY_PROFILES["LOW"])
+
+
+def get_resource_count_range(category, severity):
+    severity_ranges = RESOURCE_COUNT_RANGES.get(severity, RESOURCE_COUNT_RANGES["LOW"])
+    return severity_ranges.get(category, (1, 2))
 
 
 def estimate_travel_time_min(distance_km, category):
@@ -1292,9 +1316,8 @@ def augment_with_simulated(live_items, category, lat, lon, district, severity, m
     """Pads a live-results list up to a severity-appropriate count with
     clearly-labeled simulated resources, so the dashboard stays populated
     even where OpenStreetMap coverage is thin."""
-    profile = get_severity_profile(severity)
     if min_count is None:
-        min_count = random.randint(*profile["count_range"])
+        min_count = random.randint(*get_resource_count_range(category, severity))
 
     combined = list(live_items)
     index = 1
@@ -1338,6 +1361,18 @@ PREPAREDNESS_LEVELS = {
     "HIGH": ("Level 3 - Critical", "Immediate action required. Activate full emergency response protocols and follow evacuation guidance without delay."),
     "MEDIUM": ("Level 2 - Elevated", "Heightened readiness advised. Monitor conditions closely and prepare contingency plans."),
     "LOW": ("Level 1 - Routine", "Standard monitoring is sufficient. No immediate action is required, but stay informed."),
+}
+
+AUDIO_LANGUAGES = {
+    "English": "en", "Hindi": "hi", "Bengali": "bn", "Gujarati": "gu",
+    "Kannada": "kn", "Malayalam": "ml", "Marathi": "mr", "Tamil": "ta",
+    "Telugu": "te", "Punjabi": "pa", "Urdu": "ur", "Arabic": "ar",
+    "Chinese (Simplified)": "zh-CN", "Czech": "cs", "Danish": "da",
+    "Dutch": "nl", "Finnish": "fi", "French": "fr", "German": "de",
+    "Greek": "el", "Italian": "it", "Japanese": "ja", "Korean": "ko",
+    "Polish": "pl", "Portuguese": "pt", "Romanian": "ro", "Russian": "ru",
+    "Slovak": "sk", "Spanish": "es", "Swedish": "sv", "Thai": "th",
+    "Turkish": "tr", "Ukrainian": "uk", "Vietnamese": "vi",
 }
 
 
@@ -2008,16 +2043,45 @@ def create_pdf(analysis):
         return f.read()
 
 
-def generate_audio_report(analysis):
-    """Generates the audio report from the same narrative-building logic
-    used to check consistency with the PDF — both read from the same
-    `analysis` dict, so numbers can't diverge between the two."""
-    narrative = _sanitize_for_speech(build_audio_narrative(analysis))
-    tts = gTTS(narrative)
+@st.cache_data(ttl=3600, show_spinner=False)
+def _translate_audio_narrative(text, target_language):
+    """Translate the report in sentence-sized requests for speech synthesis."""
+    if target_language == "en":
+        return text
+
+    translated_parts = []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    for start in range(0, len(sentences), 8):
+        chunk = " ".join(sentences[start:start + 8]).strip()
+        if not chunk:
+            continue
+        response = requests.get(
+            "https://translate.googleapis.com/translate_a/single",
+            params={"client": "gtx", "sl": "en", "tl": target_language, "dt": "t", "q": chunk},
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        translated_parts.append("".join(part[0] for part in payload[0] if part and part[0]))
+    return " ".join(translated_parts)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _synthesize_audio(text, language):
+    tts = gTTS(text, lang=language, slow=False)
     mp3_buf = BytesIO()
     tts.write_to_fp(mp3_buf)
     mp3_buf.seek(0)
     return mp3_buf.read()
+
+
+def generate_audio_report(analysis, language="en"):
+    """Generates the audio report from the same narrative-building logic
+    used to check consistency with the PDF — both read from the same
+    `analysis` dict, so numbers can't diverge between the two."""
+    narrative = _sanitize_for_speech(build_audio_narrative(analysis))
+    translated_narrative = _translate_audio_narrative(narrative, language)
+    return _synthesize_audio(translated_narrative, language)
 
 
 # =========================================================
@@ -3888,11 +3952,17 @@ def render_report_tab(analysis):
         st.markdown("<div class='report-panel'><div class='report-panel-title'>📑 Full PDF report</div>Complete analysis with charts, hazards, recommendations, and emergency resources.</div>", unsafe_allow_html=True)
         st.download_button(label="📄 Download PDF Report", data=pdf_bytes, file_name="disaster_report.pdf", mime="application/pdf")
 
+    selected_audio_name = st.selectbox("🎧 Audio language", list(AUDIO_LANGUAGES), index=0)
+    selected_audio_code = AUDIO_LANGUAGES[selected_audio_name]
     try:
-        audio_bytes = generate_audio_report(analysis)
-        st.markdown("<div class='report-panel'><div class='report-panel-title'>🎧 Audio briefing</div>Listen to a spoken summary of the same analysis.</div>", unsafe_allow_html=True)
+        audio_bytes = generate_audio_report(analysis, language=selected_audio_code)
+        audio_filename = f"disaster_audio_report_{selected_audio_code}.mp3"
+        with open(audio_filename, "wb") as audio_file:
+            audio_file.write(audio_bytes)
+        st.markdown(f"<div class='report-panel'><div class='report-panel-title'>🎧 Audio briefing · {selected_audio_name}</div>Listen to a translated spoken summary of the same analysis.</div>", unsafe_allow_html=True)
         st.audio(audio_bytes, format="audio/mpeg")
-        st.download_button(label="🎵 Download Audio Report", data=audio_bytes, file_name="disaster_audio_report.mp3", mime="audio/mpeg")
+        st.caption(f"Saved as `{os.path.abspath(audio_filename)}`")
+        st.download_button(label="🎵 Download Audio Report", data=audio_bytes, file_name=audio_filename, mime="audio/mpeg")
     except Exception as e:
         log_error("Error generating or playing audio report.", exc=e)
 
