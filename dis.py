@@ -10,7 +10,9 @@ import json
 import os
 import urllib.request
 import re
-from html import escape
+import unicodedata
+import hashlib
+from html import escape, unescape
 import concurrent.futures
 from io import BytesIO
 from math import radians, cos, sin, sqrt, atan2, pi
@@ -27,6 +29,11 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.graphics.shapes import Drawing, Circle, String
 from gtts import gTTS
 import pydeck as pdk
+
+try:
+    import speech_recognition as sr
+except ImportError:
+    sr = None
 
 _RESPONSE_CSS = """
 <style>
@@ -718,21 +725,271 @@ def get_volcano_alerts():
     return volcano_events
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_coordinates(place):
-    geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={place}"
-    response = requests.get(geo_url, timeout=10).json()
+GDACS_EVENT_NAMES = {
+    "EQ": "Earthquake", "TC": "Tropical Cyclone", "FL": "Flood",
+    "VO": "Volcano", "WF": "Wildfire", "DR": "Drought",
+}
+CORE_DANGER_EVENT_TYPES = {"FL", "EQ", "VO"}
+GDACS_EVENT_ICONS = {
+    "EQ": "🌍", "TC": "🌀", "FL": "🌊", "VO": "🌋",
+    "WF": "🔥", "DR": "🏜️",
+}
+GDACS_ALERT_COLORS = {
+    "Red": [239, 68, 68, 235],
+    "Orange": [249, 115, 22, 230],
+    "Green": [34, 197, 94, 210],
+}
 
-    if "results" in response:
-        result = response["results"][0]
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_global_danger_locations():
+    """Load active worldwide disaster events from the official GDACS feed."""
+    response = requests.get(
+        "https://www.gdacs.org/contentdata/xml/gdacsAPP_Home.geojson",
+        headers={"User-Agent": "DisasterCopilot/1.0 (global danger watch)"},
+        timeout=8,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    features = payload.get("features", []) if isinstance(payload, dict) else []
+    events = []
+
+    for feature in features:
+        if not isinstance(feature, dict):
+            continue
+        properties = feature.get("properties") or {}
+        geometry = feature.get("geometry") or {}
+        if not isinstance(properties, dict) or not isinstance(geometry, dict):
+            continue
+
+        coordinates = geometry.get("coordinates") or []
+        while coordinates and isinstance(coordinates[0], list):
+            coordinates = coordinates[0]
+        if len(coordinates) < 2:
+            continue
+        try:
+            lon, lat = float(coordinates[0]), float(coordinates[1])
+        except (TypeError, ValueError):
+            continue
+
+        event_type = str(properties.get("eventtype") or "").upper()
+        alert_level = str(properties.get("alertlevel") or "Green").title()
+        if (
+            event_type not in CORE_DANGER_EVENT_TYPES
+            or alert_level not in GDACS_ALERT_COLORS
+        ):
+            continue
+
+        web_link = None
+        for link in properties.get("link") or []:
+            if isinstance(link, dict) and str(link.get("Key", "")).lower() == "web":
+                web_link = str(link.get("Value") or "").replace("http://", "https://")
+                break
+
+        severity = properties.get("severity")
+        severity_unit = properties.get("severityunit") or ""
+        severity_text = f"{severity} {severity_unit}".strip() if severity is not None else "Not reported"
+        events.append({
+            "event_type": event_type,
+            "hazard": GDACS_EVENT_NAMES[event_type],
+            "icon": GDACS_EVENT_ICONS[event_type],
+            "alert_level": alert_level,
+            "country": properties.get("country") or "Location unavailable",
+            "title": properties.get("title") or GDACS_EVENT_NAMES[event_type],
+            "description": properties.get("description") or "",
+            "severity": severity_text,
+            "updated": properties.get("todate") or properties.get("fromdate") or "",
+            "lat": lat, "lon": lon, "web_link": web_link,
+            "color": GDACS_ALERT_COLORS[alert_level],
+            "radius": {"Red": 220000, "Orange": 170000, "Green": 110000}[alert_level],
+        })
+
+    alert_rank = {"Red": 3, "Orange": 2, "Green": 1}
+    events.sort(
+        key=lambda event: (alert_rank[event["alert_level"]], event["updated"]),
+        reverse=True,
+    )
+    return events
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_cached_global_danger_feed():
+    """Cache both successful feeds and temporary failures for five minutes."""
+    try:
+        return get_global_danger_locations(), None
+    except Exception as exc:
+        log_error("Could not load the GDACS global danger feed.", exc=exc)
+        return [], "The global danger feed is temporarily unavailable."
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_coordinates(place, state=None, country=None):
+    """Resolve a district/locality and prefer the selected parent regions."""
+    geo_url = "https://geocoding-api.open-meteo.com/v1/search"
+    response = requests.get(
+        geo_url,
+        params={"name": place, "count": 100, "language": "en", "format": "json"},
+        timeout=10,
+    ).json()
+
+    if response.get("results"):
+        results = response["results"]
+
+        def normalized(value):
+            value = unicodedata.normalize("NFKD", value or "")
+            return re.sub(r"[^a-z0-9]", "", value.lower())
+
+        selected_country = normalized(country)
+        selected_state = normalized(state)
+
+        def match_score(result):
+            score = 0
+            if selected_country and normalized(result.get("country")) == selected_country:
+                score += 4
+            if selected_state and normalized(result.get("admin1")) == selected_state:
+                score += 3
+            if normalized(result.get("name")) == normalized(place):
+                score += 2
+            return score
+
+        result = max(results, key=match_score)
         lat = result["latitude"]
         lon = result["longitude"]
-        district = result.get("name", "Unknown")
-        state = result.get("admin1", "Unknown")
-        country = result.get("country", "Unknown")
-        return lat, lon, district, state, country
+        resolved_district = place or result.get("name", "Unknown")
+        resolved_state = state or result.get("admin1", "Unknown")
+        resolved_country = country or result.get("country", "Unknown")
+        return lat, lon, resolved_district, resolved_state, resolved_country
 
     return None, None, None, None, None
+
+
+# Countries Now provides the dependent state and city/locality lists without an
+# API key. The final level is called "District" in the UI because that is the
+# operational area used by the dashboard; where no district tier exists, the
+# service returns the equivalent city/locality.
+CONTINENTS = ["Africa", "Asia", "Europe", "North America", "South America", "Oceania"]
+
+# Kept locally so the first two selectors never depend on a third-party API.
+COUNTRIES_BY_CONTINENT = {
+    "Africa": [
+        "Algeria", "Angola", "Benin", "Botswana", "Burkina Faso", "Burundi",
+        "Cabo Verde", "Cameroon", "Central African Republic", "Chad", "Comoros",
+        "Democratic Republic of the Congo", "Djibouti", "Egypt", "Equatorial Guinea",
+        "Eritrea", "Eswatini", "Ethiopia", "Gabon", "Gambia", "Ghana", "Guinea",
+        "Guinea-Bissau", "Ivory Coast", "Kenya", "Lesotho", "Liberia", "Libya",
+        "Madagascar", "Malawi", "Mali", "Mauritania", "Mauritius", "Morocco",
+        "Mozambique", "Namibia", "Niger", "Nigeria", "Republic of the Congo",
+        "Rwanda", "São Tomé and Príncipe", "Senegal", "Seychelles", "Sierra Leone",
+        "Somalia", "South Africa", "South Sudan", "Sudan", "Tanzania", "Togo",
+        "Tunisia", "Uganda", "Zambia", "Zimbabwe",
+    ],
+    "Asia": [
+        "Afghanistan", "Armenia", "Azerbaijan", "Bahrain", "Bangladesh", "Bhutan",
+        "Brunei", "Cambodia", "China", "Cyprus", "Georgia", "India", "Indonesia",
+        "Iran", "Iraq", "Israel", "Japan", "Jordan", "Kazakhstan", "Kuwait",
+        "Kyrgyzstan", "Laos", "Lebanon", "Malaysia", "Maldives", "Mongolia",
+        "Myanmar", "Nepal", "North Korea", "Oman", "Pakistan", "Palestine",
+        "Philippines", "Qatar", "Saudi Arabia", "Singapore", "South Korea",
+        "Sri Lanka", "Syria", "Taiwan", "Tajikistan", "Thailand", "Timor-Leste",
+        "Turkey", "Turkmenistan", "United Arab Emirates", "Uzbekistan", "Vietnam",
+        "Yemen",
+    ],
+    "Europe": [
+        "Albania", "Andorra", "Austria", "Belarus", "Belgium", "Bosnia and Herzegovina",
+        "Bulgaria", "Croatia", "Czech Republic", "Denmark", "Estonia", "Finland",
+        "France", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy",
+        "Kosovo", "Latvia", "Liechtenstein", "Lithuania", "Luxembourg", "Malta",
+        "Moldova", "Monaco", "Montenegro", "Netherlands", "North Macedonia", "Norway",
+        "Poland", "Portugal", "Romania", "Russia", "San Marino", "Serbia", "Slovakia",
+        "Slovenia", "Spain", "Sweden", "Switzerland", "Ukraine", "United Kingdom",
+        "Vatican City",
+    ],
+    "North America": [
+        "Antigua and Barbuda", "Bahamas", "Barbados", "Belize", "Canada", "Costa Rica",
+        "Cuba", "Dominica", "Dominican Republic", "El Salvador", "Grenada", "Guatemala",
+        "Haiti", "Honduras", "Jamaica", "Mexico", "Nicaragua", "Panama",
+        "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines",
+        "Trinidad and Tobago", "United States",
+    ],
+    "South America": [
+        "Argentina", "Bolivia", "Brazil", "Chile", "Colombia", "Ecuador", "Guyana",
+        "Paraguay", "Peru", "Suriname", "Uruguay", "Venezuela",
+    ],
+    "Oceania": [
+        "Australia", "Fiji", "Kiribati", "Marshall Islands", "Micronesia", "Nauru",
+        "New Zealand", "Palau", "Papua New Guinea", "Samoa", "Solomon Islands",
+        "Tonga", "Tuvalu", "Vanuatu",
+    ],
+}
+
+FALLBACK_LOCATIONS = {
+    "Asia": {
+        "India": {
+            "Karnataka": ["Bengaluru", "Belagavi", "Dakshina Kannada", "Dharwad", "Mysuru", "Shivamogga", "Udupi"],
+            "Kerala": ["Alappuzha", "Ernakulam", "Idukki", "Kannur", "Kollam", "Kottayam", "Kozhikode", "Thiruvananthapuram", "Wayanad"],
+            "Maharashtra": ["Ahmednagar", "Mumbai", "Nagpur", "Nashik", "Pune", "Raigad", "Ratnagiri", "Satara", "Thane"],
+            "Tamil Nadu": ["Chennai", "Coimbatore", "Cuddalore", "Madurai", "Salem", "Thanjavur", "Tiruchirappalli", "Tirunelveli"],
+            "Telangana": ["Hyderabad", "Karimnagar", "Khammam", "Nalgonda", "Nizamabad", "Warangal"],
+        }
+    }
+}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_countries_by_continent():
+    return {
+        continent: sorted(set(COUNTRIES_BY_CONTINENT.get(continent, [])))
+        for continent in CONTINENTS
+    }
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_states_for_country(country):
+    states = []
+    try:
+        response = requests.post(
+            "https://countriesnow.space/api/v0.1/countries/states",
+            json={"country": country},
+            timeout=12,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        data = (payload.get("data") or {}) if isinstance(payload, dict) else {}
+        state_items = data.get("states", []) if isinstance(data, dict) else []
+        states = [
+            item["name"]
+            for item in state_items
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        ]
+    except (requests.RequestException, ValueError, TypeError, AttributeError):
+        pass
+
+    fallback = []
+    for countries in FALLBACK_LOCATIONS.values():
+        fallback.extend(countries.get(country, {}).keys())
+    return sorted(set(states) | set(fallback))
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_districts_for_state(country, state):
+    districts = []
+    try:
+        response = requests.post(
+            "https://countriesnow.space/api/v0.1/countries/state/cities",
+            json={"country": country, "state": state},
+            timeout=12,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        data = (payload.get("data") or []) if isinstance(payload, dict) else []
+        districts = [item for item in data if isinstance(item, str)] if isinstance(data, list) else []
+    except (requests.RequestException, ValueError, TypeError, AttributeError):
+        pass
+
+    fallback = []
+    for countries in FALLBACK_LOCATIONS.values():
+        fallback.extend(countries.get(country, {}).get(state, []))
+    return sorted(set(districts) | set(fallback))
 
 
 # Performance tuning: keep the whole live-data phase well under the
@@ -969,26 +1226,21 @@ def get_country_risk_from_earthquakes(earthquakes):
     country_color = {}
     for country, score in country_risk.items():
         if score > 20:
-            country_color[country] = [255, 0, 0, 150]
+            country_color[country] = [239, 68, 68, 225]
         elif score > 10:
-            country_color[country] = [255, 255, 0, 150]
+            country_color[country] = [249, 115, 22, 210]
         else:
-            country_color[country] = [0, 255, 0, 100]
+            country_color[country] = [34, 197, 94, 165]
     return country_color
 
 
 # ---------------------------------------------------------
 #  Homepage map styling helpers
 #
-#  The homepage previously colored every country into one of three flat
-#  buckets (red / yellow / green), which made two very different
-#  earthquake days look identical on the map. get_country_risk_scores
-#  keeps the raw magnitude-weighted score per country, and
-#  _risk_gradient_color turns that into a smooth green -> yellow -> red
-#  gradient scaled against today's most active country, so relative
-#  severity is visible at a glance. Both are used only by
-#  render_home_tab; get_country_risk_from_earthquakes above is left
-#  untouched in case anything else still depends on it.
+#  get_country_risk_scores keeps the raw magnitude-weighted score per
+#  country, and _risk_gradient_color turns it into fixed green / orange /
+#  red status buckets. get_country_risk_from_earthquakes uses the same
+#  palette for any older callers.
 # ---------------------------------------------------------
 def get_country_risk_scores(earthquakes):
     """Aggregate magnitude-weighted risk score per country from today's
@@ -1003,24 +1255,12 @@ def get_country_risk_scores(earthquakes):
 
 
 def _risk_gradient_color(score, max_score):
-    """Continuous green -> yellow -> red fill color for a country on the
-    homepage map, scaled relative to max_score (today's highest-scoring
-    country). Countries with no seismic activity stay a calm green."""
-    if max_score <= 0 or score <= 0:
-        return [46, 204, 113, 70]
-    t = max(0.0, min(1.0, score / max_score))
-    if t < 0.5:
-        local_t = t / 0.5
-        r = int(46 + (255 - 46) * local_t)
-        g = int(204 + (221 - 204) * local_t)
-        b = int(113 - 113 * local_t)
-    else:
-        local_t = (t - 0.5) / 0.5
-        r = 255
-        g = int(221 - 221 * local_t)
-        b = 0
-    alpha = int(90 + 90 * t)
-    return [r, g, b, alpha]
+    """Return fixed colors for safe, medium-alert, and high-alert regions."""
+    if score > 20:
+        return [239, 68, 68, 225]   # red: high alert
+    if score > 10:
+        return [249, 115, 22, 210]  # orange: medium alert
+    return [34, 197, 94, 165]       # green: safe / low activity
 
 
 _HOME_CSS = """
@@ -1045,6 +1285,21 @@ _HOME_CSS = """
     background: linear-gradient(135deg,#1a3c6e,#2c5aa0); color: white; text-align: center; }
 .dc-stat-num { font-size: 1.7rem; font-weight: 800; line-height: 1; }
 .dc-stat-label { font-size: 0.75rem; opacity: 0.85; margin-top: 4px; }
+.dc-watch-summary { margin: 18px 0 12px; padding: 14px 16px; border-radius: 10px;
+    background: #171a22; border: 1px solid #334155; color: #cbd5e1; font-size: .84rem; }
+.dc-alert-card { min-height: 168px; padding: 16px; margin-bottom: 12px; border-radius: 12px;
+    background: #171a22; border: 1px solid #334155; }
+.dc-alert-card.red { border-left: 5px solid #ef4444; }
+.dc-alert-card.orange { border-left: 5px solid #f97316; }
+.dc-alert-card.green { border-left: 5px solid #facc15; }
+.dc-alert-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.dc-alert-type { color: #f8fafc; font-weight: 800; font-size: .9rem; }
+.dc-alert-level { border-radius: 999px; padding: 3px 9px; font-size: .68rem; font-weight: 800;
+    background: #273244; color: #f8fafc; white-space: nowrap; }
+.dc-alert-place { color: #e2e8f0; font-size: .86rem; font-weight: 700; margin-top: 10px; }
+.dc-alert-meta { color: #94a3b8; font-size: .74rem; line-height: 1.5; margin-top: 6px; }
+.dc-alert-link { display: inline-block; color: #7dd3fc !important; font-size: .74rem;
+    font-weight: 700; margin-top: 9px; text-decoration: none; }
 .dc-snapshot-banner { border-radius: 12px; padding: 16px 22px; display: flex;
     justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
     margin-bottom: 16px; color: white; }
@@ -1374,6 +1629,91 @@ AUDIO_LANGUAGES = {
     "Slovak": "sk", "Spanish": "es", "Swedish": "sv", "Thai": "th",
     "Turkish": "tr", "Ukrainian": "uk", "Vietnamese": "vi",
 }
+
+VOICE_INPUT_LANGUAGES = {
+    "English": "en-IN", "Hindi": "hi-IN", "Bengali": "bn-IN",
+    "Gujarati": "gu-IN", "Kannada": "kn-IN", "Malayalam": "ml-IN",
+    "Marathi": "mr-IN", "Tamil": "ta-IN", "Telugu": "te-IN",
+    "Punjabi": "pa-IN", "Urdu": "ur-IN", "Arabic": "ar-SA",
+    "Chinese (Simplified)": "zh-CN", "Czech": "cs-CZ", "Danish": "da-DK",
+    "Dutch": "nl-NL", "Finnish": "fi-FI", "French": "fr-FR",
+    "German": "de-DE", "Greek": "el-GR", "Italian": "it-IT",
+    "Japanese": "ja-JP", "Korean": "ko-KR", "Polish": "pl-PL",
+    "Portuguese": "pt-PT", "Romanian": "ro-RO", "Russian": "ru-RU",
+    "Slovak": "sk-SK", "Spanish": "es-ES", "Swedish": "sv-SE",
+    "Thai": "th-TH", "Turkish": "tr-TR", "Ukrainian": "uk-UA",
+    "Vietnamese": "vi-VN",
+}
+
+
+def _normalized_place(value):
+    value = unicodedata.normalize("NFKD", value or "")
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _canonical_country_and_continent(country_name):
+    aliases = {
+        "unitedstatesofamerica": "United States",
+        "russianfederation": "Russia",
+        "republicofkorea": "South Korea",
+        "korearepublicof": "South Korea",
+        "czechia": "Czech Republic",
+        "cotedivoire": "Ivory Coast",
+        "turkiye": "Turkey",
+        "unitedrepublicoftanzania": "Tanzania",
+    }
+    wanted = aliases.get(_normalized_place(country_name), country_name)
+    wanted_normalized = _normalized_place(wanted)
+    for continent, countries in COUNTRIES_BY_CONTINENT.items():
+        for country in countries:
+            if _normalized_place(country) == wanted_normalized:
+                return country, continent
+    return country_name, None
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def resolve_spoken_location(spoken_place):
+    """Resolve speech such as 'Dhalai, Tripura, India' into the four tiers."""
+    response = requests.get(
+        "https://nominatim.openstreetmap.org/search",
+        params={
+            "q": spoken_place, "format": "jsonv2", "addressdetails": 1,
+            "limit": 1, "accept-language": "en",
+        },
+        headers={"User-Agent": "DisasterCopilot/1.0 (location voice input)"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, list) or not payload:
+        return None
+
+    address = payload[0].get("address") or {}
+    if not isinstance(address, dict):
+        return None
+    country, continent = _canonical_country_and_continent(address.get("country"))
+    state = address.get("state") or address.get("region")
+    district = (
+        address.get("state_district") or address.get("county")
+        or address.get("city_district") or address.get("city")
+        or address.get("town") or address.get("municipality")
+        or address.get("village")
+    )
+    if not all((continent, country, state, district)):
+        return None
+    return {
+        "continent": continent, "country": country,
+        "state": state, "district": district,
+    }
+
+
+def transcribe_location_audio(audio_bytes, language_code):
+    if sr is None:
+        raise RuntimeError("SpeechRecognition is not installed")
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(BytesIO(audio_bytes)) as source:
+        audio_data = recognizer.record(source)
+    return recognizer.recognize_google(audio_data, language=language_code).strip()
 
 
 def get_preparedness_level(analysis):
@@ -2045,24 +2385,83 @@ def create_pdf(analysis):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _translate_audio_narrative(text, target_language):
-    """Translate the report in sentence-sized requests for speech synthesis."""
+    """Translate the report for speech synthesis.
+
+    Google occasionally rate-limits its public endpoint. Keep requests small
+    and, if it becomes unavailable, finish the translation through MyMemory
+    instead of failing the complete audio report.
+    """
     if target_language == "en":
         return text
 
-    translated_parts = []
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    for start in range(0, len(sentences), 8):
-        chunk = " ".join(sentences[start:start + 8]).strip()
-        if not chunk:
-            continue
+    def split_chunks(value, limit=450):
+        sentences = re.split(r"(?<=[.!?])\s+", value)
+        chunks = []
+        current = ""
+        for sentence in sentences:
+            words = sentence.split()
+            for word in words:
+                candidate = f"{current} {word}".strip()
+                if current and len(candidate) > limit:
+                    chunks.append(current)
+                    current = word
+                else:
+                    current = candidate
+        if current:
+            chunks.append(current)
+        return chunks
+
+    def google_translate(chunk):
         response = requests.get(
             "https://translate.googleapis.com/translate_a/single",
             params={"client": "gtx", "sl": "en", "tl": target_language, "dt": "t", "q": chunk},
+            headers={"User-Agent": "Mozilla/5.0"},
             timeout=15,
         )
         response.raise_for_status()
         payload = response.json()
-        translated_parts.append("".join(part[0] for part in payload[0] if part and part[0]))
+        translated = "".join(part[0] for part in payload[0] if part and part[0])
+        if not translated.strip():
+            raise ValueError("Google returned an empty translation")
+        return translated
+
+    def mymemory_translate(chunk):
+        response = requests.get(
+            "https://api.mymemory.translated.net/get",
+            params={"q": chunk, "langpair": f"en|{target_language}"},
+            headers={"User-Agent": "DisasterCopilot/1.0"},
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        translated = unescape(payload.get("responseData", {}).get("translatedText", ""))
+        response_status = payload.get("responseStatus", 200)
+        if response_status != 200 or not translated.strip():
+            detail = payload.get("responseDetails") or "empty translation"
+            raise ValueError(f"MyMemory translation failed: {detail}")
+        return translated
+
+    translated_parts = []
+    google_available = True
+    google_error = None
+    for chunk in split_chunks(text):
+        if google_available:
+            try:
+                translated_parts.append(google_translate(chunk))
+                continue
+            except (requests.RequestException, ValueError, KeyError, TypeError, IndexError) as exc:
+                google_available = False
+                google_error = exc
+
+        try:
+            translated_parts.append(mymemory_translate(chunk))
+        except (requests.RequestException, ValueError, KeyError, TypeError) as fallback_error:
+            raise RuntimeError(
+                "Translation services are temporarily unavailable. Please wait a minute and try again."
+            ) from fallback_error
+
+    if google_error:
+        logging.warning("Google translation unavailable; used fallback service: %s", google_error)
     return " ".join(translated_parts)
 
 
@@ -2343,19 +2742,35 @@ def predict_drought(daily, historical):
     if historical and historical.get("total_30d_mm") is not None:
         reasons.append(f"{historical['total_30d_mm']} mm fell over the past 30 days")
 
-    score = 0
+    # A dry seven-day forecast is a short-term signal, not proof of drought.
+    # Drought escalation requires a dry 30-day baseline as corroboration.
+    forecast_pressure = 0
     if daily_precip:
-        score += max(0, 10 - rain_7d_forecast) * 3
-        score += dry_days_forecast * 5
-    if historical and (historical.get("total_30d_mm") or 999) < 20:
-        score += 25
-        reasons.append("30-day rainfall total is well below a healthy baseline")
+        forecast_pressure += max(0, 10 - rain_7d_forecast) * 3
+        forecast_pressure += dry_days_forecast * 5
+    forecast_pressure = min(100, forecast_pressure)
 
-    if score > 55:
+    historical_total = historical.get("total_30d_mm") if historical else None
+    if historical_total is None:
+        # Without a baseline, cap the result at LOW regardless of a dry week.
+        score = min(30, forecast_pressure * 0.45)
+        if daily_precip:
+            reasons.append("30-day rainfall baseline unavailable; drought escalation is capped at low")
+    else:
+        rainfall_deficit = max(0, min(100, ((60 - historical_total) / 60) * 100))
+        score = forecast_pressure * 0.35 + rainfall_deficit * 0.65
+        if historical_total < 20:
+            reasons.append("30-day rainfall total is critically below the drought baseline")
+        elif historical_total < 50:
+            reasons.append("30-day rainfall total is below the drought baseline")
+        else:
+            reasons.append("recent 30-day rainfall does not indicate established drought")
+
+    if historical_total is not None and score >= 70:
         level, window = "HIGH", "developing over the coming 1-2 weeks"
-    elif score > 30:
+    elif historical_total is not None and score >= 45:
         level, window = "MEDIUM", "developing over the coming 2-4 weeks"
-    elif score > 10:
+    elif score >= 15:
         level, window = "LOW", "early signs only"
     else:
         level, window = "NONE", "not indicated at this time"
@@ -2368,8 +2783,8 @@ def predict_drought(daily, historical):
         "NONE": ["No action needed; continue routine monitoring"],
     }[level]
 
-    confidence = 50 + (15 if daily_precip else 0) + (15 if historical else 0)
-    return _hazard_result(level, score * 1.1, confidence, reasons, window, actions)
+    confidence = 45 + (15 if daily_precip else 0) + (20 if historical_total is not None else 0)
+    return _hazard_result(level, score, confidence, reasons, window, actions)
 
 
 def predict_earthquake_activity(earthquakes, lat, lon):
@@ -2487,14 +2902,53 @@ def build_early_warning_alerts(hazard_details):
     return alerts
 
 
+def calculate_composite_risk(hazard_details):
+    """Return one score/level derived from the same seven hazard results."""
+    level_score_bands = {
+        "NONE": (0.0, 14.9), "LOW": (15.0, 39.9),
+        "MEDIUM": (40.0, 69.9), "HIGH": (70.0, 99.0),
+    }
+    hazard_scores = {}
+    for hazard_name, detail in hazard_details.items():
+        level = detail["level"]
+        lower, upper = level_score_bands.get(level, level_score_bands["NONE"])
+        evidence_score = detail["probability_pct"] * (
+            0.7 + 0.3 * detail["confidence_pct"] / 100
+        )
+        hazard_scores[hazard_name] = max(lower, min(upper, evidence_score))
+
+    risk_score = max(hazard_scores.values(), default=0.0)
+    if risk_score >= 70:
+        overall_risk = "HIGH"
+    elif risk_score >= 40:
+        overall_risk = "MEDIUM"
+    else:
+        overall_risk = "LOW"
+
+    ranked_hazards = sorted(hazard_scores, key=hazard_scores.get, reverse=True)
+    overall_drivers = [
+        HAZARD_DISPLAY_NAMES.get(name, name.title())
+        for name in ranked_hazards
+        if hazard_details[name]["level"] == overall_risk
+    ][:3]
+    if not overall_drivers:
+        overall_drivers = ["No elevated hazards"]
+
+    score_total = sum(hazard_scores.values()) or 1.0
+    hazard_weights = {
+        name: score / score_total for name, score in hazard_scores.items()
+    }
+    return overall_risk, risk_score, hazard_scores, overall_drivers, hazard_weights
+
+
 # =========================================================
 #  MAIN ANALYSIS PIPELINE
 #  Runs once per "Analyze Risk" click; result is cached in
 #  st.session_state so every tab can read from it without
 #  re-hitting the network APIs.
 # =========================================================
-def run_analysis(place):
-    lat, lon, district, state, country = get_coordinates(place)
+def run_analysis(place, state=None, country=None):
+    lat, lon, district, state, country = get_coordinates(place, state, country)
     if lat is None:
         return None
 
@@ -2794,78 +3248,6 @@ def run_analysis(place):
         volcano_risk = "HIGH"
     volcano_prediction = volcano_detail["level"]
 
-    # ---------- Adaptive weight recalibration (composite risk_score) ----------
-    # The previous risk_score was a fixed-weight blend of only two
-    # signals (rainfall * 0.7 + windspeed * 0.3). That static split
-    # doesn't reflect that a run with strong seismic/volcanic evidence
-    # but calm weather is understating its true severity, or that a
-    # run with heavy rain but negligible wind is overweighting wind.
-    # Each of the four inputs is first normalized onto a common 0-100
-    # scale, then the weights are recalibrated per run: whichever
-    # signal(s) are relatively most severe THIS run automatically carry
-    # proportionally more influence over the composite score, rather
-    # than using the same fixed split every time. Weights always sum to
-    # 1, so risk_score stays on a comparable 0-100 scale across runs
-    # regardless of which signal dominates. If every signal is ~0
-    # (calm conditions across the board), weighting falls back to an
-    # equal split since there's nothing to differentiate.
-    RAINFALL_NORM_CAP_MM = 50.0    # 6h rainfall considered "maximal" for scoring
-    WINDSPEED_NORM_CAP_KMH = 120.0  # windspeed considered "maximal" for scoring
-    ONLINE_LEARNING_RATE = 0.15     # how strongly each new prediction nudges the persisted weights
-
-    def _normalize_0_100(value, cap):
-        if not value or cap <= 0:
-            return 0.0
-        return max(0.0, min(100.0, (value / cap) * 100.0))
-
-    def _recalibrate_weights(signals):
-        """signals: dict of {name: normalized_value_0_100}. Returns
-        recalibrated weights (summing to 1) proportional to each
-        signal's relative share of total normalized severity this run."""
-        total = sum(signals.values())
-        if total <= 0:
-            n = len(signals) or 1
-            return {name: 1.0 / n for name in signals}
-        return {name: value / total for name, value in signals.items()}
-
-    normalized_signals = {
-        "rainfall": _normalize_0_100(rainfall, RAINFALL_NORM_CAP_MM),
-        "windspeed": _normalize_0_100(windspeed or 0, WINDSPEED_NORM_CAP_KMH),
-        "earthquake": earthquake_detail["probability_pct"],
-        "volcano": volcano_detail["probability_pct"],
-    }
-    observed_weights = _recalibrate_weights(normalized_signals)
-
-    # ---------- Online learning ----------
-    # The weights that drive risk_score are no longer recomputed from
-    # scratch every run. A persisted weight vector lives in session
-    # state, starting equal across the four signals, and after every
-    # prediction it is nudged toward this run's freshly observed
-    # weighting via an exponentially-weighted moving-average update:
-    #   new = (1 - lr) * old + lr * observed
-    # so each prediction updates the weights that the *next* prediction
-    # will use, rather than each run being independent. Renormalized so
-    # weights always sum to 1 despite floating-point drift.
-    if "online_weights" not in st.session_state:
-        n = len(normalized_signals)
-        st.session_state.online_weights = {name: 1.0 / n for name in normalized_signals}
-
-    persisted_weights = st.session_state.online_weights
-    updated_weights = {
-        name: (1 - ONLINE_LEARNING_RATE) * persisted_weights.get(name, 1.0 / len(normalized_signals))
-        + ONLINE_LEARNING_RATE * observed_weights[name]
-        for name in normalized_signals
-    }
-    weight_total = sum(updated_weights.values()) or 1.0
-    updated_weights = {name: value / weight_total for name, value in updated_weights.items()}
-    st.session_state.online_weights = updated_weights  # persisted for the next prediction
-
-    adaptive_weights = updated_weights
-    risk_score = sum(
-        adaptive_weights[name] * normalized_signals[name] for name in normalized_signals
-    )
-
-
     # ---------- Flood (Bayesian probability estimation) ----------
     # Naive-Bayes-style posterior combining three evidence signals —
     # 6-hour rainfall, current wind speed, and 3-day forecast rainfall —
@@ -2969,20 +3351,16 @@ def run_analysis(place):
     }
     early_warning_alerts = build_early_warning_alerts(hazard_details)
 
-    # ---------- Overall ----------
-    # Reflects ALL hazards (not just flood/earthquake/volcano), since an
-    # accurate "overall risk" for an early-warning system shouldn't miss
-    # a severe heatwave or storm just because it isn't one of the
-    # original three categories. This does not change how or when the
-    # Emergency Response system activates (see mas_active below, which
-    # keeps its original flood/earthquake/volcano-only trigger).
-    all_levels = [d["level"] for d in hazard_details.values()]
-    if "HIGH" in all_levels:
-        overall_risk = "HIGH"
-    elif "MEDIUM" in all_levels:
-        overall_risk = "MEDIUM"
-    else:
-        overall_risk = "LOW"
+    # ---------- Consistent composite score and overall rating ----------
+    # Every displayed hazard now contributes to the same score. Probability
+    # is tempered by confidence, then constrained to the numeric band that
+    # corresponds to its categorical level. The worst credible hazard drives
+    # the overall result, which is appropriate for an early-warning dashboard
+    # and guarantees that the score and label cannot contradict each other.
+    (
+        overall_risk, risk_score, hazard_scores,
+        overall_drivers, adaptive_weights,
+    ) = calculate_composite_risk(hazard_details)
 
     mas_active = (
         flood_risk in ["HIGH", "MEDIUM"]
@@ -3132,6 +3510,7 @@ def run_analysis(place):
         "rainfall": rainfall, "is_raining": is_raining,
         "flood_risk": flood_risk, "flood_prediction": flood_prediction,
         "risk_score": risk_score, "adaptive_weights": adaptive_weights,
+        "hazard_scores": hazard_scores, "overall_drivers": overall_drivers,
         "earthquake_risk": earthquake_risk, "earthquake_prediction": earthquake_prediction,
         "best_eq": best_eq,
         "volcano_risk": volcano_risk, "volcano_prediction": volcano_prediction,
@@ -3160,8 +3539,119 @@ def run_analysis(place):
 # =========================================================
 #  RENDER: HOME TAB
 # =========================================================
-def render_home_tab(analysis):
+def render_danger_locations_tab():
     st.markdown(_HOME_CSS, unsafe_allow_html=True)
+    all_global_events, danger_feed_error = get_cached_global_danger_feed()
+    elevated_events = [
+        event for event in all_global_events
+        if event["alert_level"] in ("Red", "Orange")
+    ]
+    displayed_events = (elevated_events or all_global_events)[:12]
+
+    st.markdown("### 🚨 Global Danger Locations")
+    st.caption("Flood, earthquake, and volcano alerts from GDACS · refreshed every five minutes")
+    if danger_feed_error:
+        st.warning(danger_feed_error)
+        return
+    if not displayed_events:
+        st.success("No active flood, earthquake, or volcano alerts are currently listed by GDACS.")
+        return
+
+    if elevated_events:
+        st.warning(
+            f"{len(elevated_events)} orange/red location alert(s) currently require attention. "
+            "Run a local analysis before making location-specific decisions."
+        )
+    else:
+        st.info("No orange/red alerts are active. Showing monitored green advisories.")
+
+    for start in range(0, len(displayed_events), 3):
+        columns = st.columns(3)
+        for column, event in zip(columns, displayed_events[start:start + 3]):
+            link_html = ""
+            if event["web_link"]:
+                safe_link = escape(event["web_link"], quote=True)
+                link_html = f"<a class='dc-alert-link' href='{safe_link}' target='_blank'>Open GDACS details ↗</a>"
+            column.markdown(
+                f"""
+                <div class='dc-alert-card {event['alert_level'].lower()}'>
+                    <div class='dc-alert-top'>
+                        <div class='dc-alert-type'>{event['icon']} {escape(event['hazard'])}</div>
+                        <div class='dc-alert-level'>{escape(event['alert_level'])} alert</div>
+                    </div>
+                    <div class='dc-alert-place'>{escape(str(event['country']))}</div>
+                    <div class='dc-alert-meta'>{escape(str(event['title']))}<br>
+                    Severity: {escape(str(event['severity']))}<br>
+                    Latest event date: {escape(str(event['updated']))}</div>
+                    {link_html}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def render_local_snapshot(analysis):
+    st.markdown(_HOME_CSS, unsafe_allow_html=True)
+    if analysis is None:
+        st.info("Select a complete location and click **Analyze Risk** to create a local snapshot.")
+        return
+
+    st.markdown("### 📍 Latest Local Analysis")
+    risk_class = {"HIGH": "dc-risk-high", "MEDIUM": "dc-risk-medium", "LOW": "dc-risk-low"}.get(
+        analysis["overall_risk"], "dc-risk-low"
+    )
+    drivers_text = ", ".join(analysis.get("overall_drivers", [])) or "No elevated hazards"
+    st.markdown(
+        f"""
+        <div class='dc-snapshot-banner {risk_class}'>
+            <div>
+                <div class='dc-snapshot-loc'>📍 {analysis['district']}, {analysis['state']}, {analysis['country']}</div>
+                <div class='dc-snapshot-coord'>Lat {analysis['lat']}, Lon {analysis['lon']}</div>
+                <div class='dc-snapshot-coord'>Primary driver: {drivers_text}</div>
+            </div>
+            <div class='dc-snapshot-risk'>Overall Risk: {analysis['overall_risk']}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    snapshot_hazards = [
+        ("Flood Risk", "🌊", analysis["flood_detail"]["level"]),
+        ("Earthquake Risk", "🌍", analysis["earthquake_detail"]["level"]),
+        ("Volcano Risk", "🌋", analysis["volcano_detail"]["level"]),
+        ("Landslide Risk", "⛰️", analysis["landslide_detail"]["level"]),
+        ("Storm / Cyclone Risk", "🌀", analysis["cyclone_detail"]["level"]),
+        ("Heatwave Risk", "🌡️", analysis["heatwave_detail"]["level"]),
+        ("Drought Risk", "🏜️", analysis["drought_detail"]["level"]),
+    ]
+    first_row = st.columns(3)
+    second_row = st.columns(4)
+    for column, (label, icon, value) in zip(first_row + second_row, snapshot_hazards):
+        level_class = {"HIGH": "dc-risk-high", "MEDIUM": "dc-risk-medium"}.get(value, "dc-risk-low")
+        column.markdown(
+            f"""
+            <div class='dc-metric-card {level_class}'>
+                <div class='dc-metric-icon'>{icon}</div>
+                <div class='dc-metric-label'>{label}</div>
+                <div class='dc-metric-value'>{value}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_home_tab(analysis, map_only=False):
+    st.markdown(_HOME_CSS, unsafe_allow_html=True)
+
+    all_global_events, danger_feed_error = get_cached_global_danger_feed()
+
+    elevated_events = [
+        event for event in all_global_events
+        if event["alert_level"] in ("Red", "Orange")
+    ]
+    # When there are no elevated alerts, show monitored advisories rather than
+    # manufacturing a danger state. The UI explicitly labels that distinction.
+    displayed_events = (elevated_events or all_global_events)[:8]
 
     header_col, updated_col = st.columns([4, 1])
     with header_col:
@@ -3173,8 +3663,8 @@ def render_home_tab(analysis):
         )
     st.markdown(
         "<div class='dc-map-caption'>Countries are shaded by combined earthquake magnitude "
-        "reported in the last 24 hours — deeper red means more seismic energy released nearby. "
-        "Enter a location above and click <b>Analyze Risk</b> for a full assessment.</div>",
+        "reported in the last 24 hours. Alert markers show locations currently monitored by GDACS. "
+        "Use the location panel in this tab for a detailed local assessment.</div>",
         unsafe_allow_html=True,
     )
 
@@ -3206,6 +3696,27 @@ def render_home_tab(analysis):
                 highlight_color=[255, 255, 255, 90],
             )
             map_layers = [geojson_layer]
+            if displayed_events:
+                alert_points = pd.DataFrame([
+                    {
+                        **event,
+                        "name": event["title"],
+                        "risk_score": f"GDACS {event['alert_level']} · {event['hazard']}",
+                    }
+                    for event in displayed_events
+                ])
+                map_layers.append(pdk.Layer(
+                    "ScatterplotLayer",
+                    alert_points,
+                    get_position="[lon, lat]",
+                    get_fill_color="color",
+                    get_line_color=[255, 255, 255, 220],
+                    get_radius="radius",
+                    radius_min_pixels=5,
+                    radius_max_pixels=18,
+                    line_width_min_pixels=1,
+                    pickable=True,
+                ))
             if analysis is not None:
                 selected_location = pd.DataFrame([{
                     "lat": analysis["lat"],
@@ -3235,9 +3746,10 @@ def render_home_tab(analysis):
             st.markdown(
                 """
                 <div class='dc-legend-row'>
-                    <div class='dc-legend-item'><span class='dc-dot' style='background:#2ecc71'></span> Low activity</div>
-                    <div class='dc-legend-item'><span class='dc-dot' style='background:#f1c40f'></span> Elevated</div>
-                    <div class='dc-legend-item'><span class='dc-dot' style='background:#ff2400'></span> High activity</div>
+                    <div class='dc-legend-item'><span class='dc-dot' style='background:#22c55e'></span> Safe / Low</div>
+                    <div class='dc-legend-item'><span class='dc-dot' style='background:#f97316'></span> Medium Alert</div>
+                    <div class='dc-legend-item'><span class='dc-dot' style='background:#ef4444'></span> High Alert</div>
+                    <div class='dc-legend-item'><span class='dc-dot' style='background:#38bdf8'></span> Selected place</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -3252,7 +3764,7 @@ def render_home_tab(analysis):
                 )
             else:
                 st.markdown("<div class='dc-side-heading'>📍 Analyzed Location</div>", unsafe_allow_html=True)
-                st.caption("Search for a place above to highlight it on the map and see its risk summary here.")
+                st.caption("Use the location panel above to analyze and highlight a place on this map.")
 
             st.markdown(
                 f"""
@@ -3263,12 +3775,66 @@ def render_home_tab(analysis):
                 """,
                 unsafe_allow_html=True,
             )
+            st.markdown(
+                f"""
+                <div class='dc-stat-box'>
+                    <div class='dc-stat-num'>{len(elevated_events)}</div>
+                    <div class='dc-stat-label'>Elevated global alerts</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     except Exception as e:
         log_error("Could not load the live world risk map.", exc=e)
 
+    if map_only:
+        return
+
+    st.markdown("### 🚨 Global Danger Watch")
+    if danger_feed_error:
+        st.warning(danger_feed_error)
+    elif not displayed_events:
+        st.success("No active flood, earthquake, or volcano alerts are currently listed by GDACS.")
+    else:
+        if elevated_events:
+            watch_message = (
+                f"{len(elevated_events)} orange/red location alert(s) currently require attention. "
+                "These are automatic global alerts; run a local analysis before making decisions."
+            )
+        else:
+            watch_message = (
+                "No orange/red alerts are active. Showing lower-level monitored locations for awareness."
+            )
+        st.markdown(f"<div class='dc-watch-summary'>{watch_message}</div>", unsafe_allow_html=True)
+
+        for start in range(0, len(displayed_events), 2):
+            event_columns = st.columns(2)
+            for column, event in zip(event_columns, displayed_events[start:start + 2]):
+                link_html = ""
+                if event["web_link"]:
+                    safe_link = escape(event["web_link"], quote=True)
+                    link_html = f"<a class='dc-alert-link' href='{safe_link}' target='_blank'>Open GDACS details ↗</a>"
+                column.markdown(
+                    f"""
+                    <div class='dc-alert-card {event['alert_level'].lower()}'>
+                        <div class='dc-alert-top'>
+                            <div class='dc-alert-type'>{event['icon']} {escape(event['hazard'])}</div>
+                            <div class='dc-alert-level'>{escape(event['alert_level'])} alert</div>
+                        </div>
+                        <div class='dc-alert-place'>{escape(str(event['country']))}</div>
+                        <div class='dc-alert-meta'>{escape(str(event['title']))}<br>
+                        Severity: {escape(str(event['severity']))}<br>
+                        Latest event date: {escape(str(event['updated']))}</div>
+                        {link_html}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        st.caption("Source: Global Disaster Alert and Coordination System (GDACS). Updated automatically every 5 minutes.")
+
     if analysis is None:
         st.markdown("---")
-        st.write("👆 Enter a place name above and click **Analyze Risk** to get started.")
+        st.write("Open **Live Risk Map**, complete the location panel, and click **Analyze Risk** to get started.")
         return
 
     st.markdown("---")
@@ -3277,12 +3843,14 @@ def render_home_tab(analysis):
     risk_class = {"HIGH": "dc-risk-high", "MEDIUM": "dc-risk-medium", "LOW": "dc-risk-low"}.get(
         analysis["overall_risk"], "dc-risk-low"
     )
+    drivers_text = ", ".join(analysis.get("overall_drivers", [])) or "No elevated hazards"
     st.markdown(
         f"""
         <div class='dc-snapshot-banner {risk_class}'>
             <div>
                 <div class='dc-snapshot-loc'>📍 {analysis['district']}, {analysis['state']}, {analysis['country']}</div>
                 <div class='dc-snapshot-coord'>Lat {analysis['lat']}, Lon {analysis['lon']}</div>
+                <div class='dc-snapshot-coord'>Primary driver: {drivers_text}</div>
             </div>
             <div class='dc-snapshot-risk'>Overall Risk: {analysis['overall_risk']}</div>
         </div>
@@ -3290,12 +3858,18 @@ def render_home_tab(analysis):
         unsafe_allow_html=True,
     )
 
-    c1, c2, c3 = st.columns(3)
-    for col, label, icon, value in [
-        (c1, "Flood Risk", "🌊", analysis["flood_risk"]),
-        (c2, "Earthquake Risk", "🌍", analysis["earthquake_risk"]),
-        (c3, "Volcano Risk", "🌋", analysis["volcano_risk"]),
-    ]:
+    snapshot_hazards = [
+        ("Flood Risk", "🌊", analysis["flood_detail"]["level"]),
+        ("Earthquake Risk", "🌍", analysis["earthquake_detail"]["level"]),
+        ("Volcano Risk", "🌋", analysis["volcano_detail"]["level"]),
+        ("Landslide Risk", "⛰️", analysis["landslide_detail"]["level"]),
+        ("Storm / Cyclone Risk", "🌀", analysis["cyclone_detail"]["level"]),
+        ("Heatwave Risk", "🌡️", analysis["heatwave_detail"]["level"]),
+        ("Drought Risk", "🏜️", analysis["drought_detail"]["level"]),
+    ]
+    first_row = st.columns(3)
+    second_row = st.columns(4)
+    for col, (label, icon, value) in zip(first_row + second_row, snapshot_hazards):
         level_class = {"HIGH": "dc-risk-high", "MEDIUM": "dc-risk-medium"}.get(value, "dc-risk-low")
         col.markdown(
             f"""
@@ -3477,7 +4051,7 @@ def render_prediction_tab(analysis):
     st.markdown(_PREDICTION_CSS, unsafe_allow_html=True)
 
     if analysis is None:
-        st.info("Run an analysis from the input above to see predictions here.")
+        st.info("Run an analysis from the **Live Risk Map** view to see predictions here.")
         return
 
     # ---------- Hero summary ----------
@@ -3640,7 +4214,7 @@ def render_response_tab(analysis):
     st.markdown(_RESPONSE_CSS, unsafe_allow_html=True)
 
     if analysis is None:
-        st.info("Run an analysis from the input above to see emergency response options here.")
+        st.info("Run an analysis from the **Live Risk Map** view to see emergency response options here.")
         return
 
     if not analysis["mas_active"]:
@@ -3779,7 +4353,7 @@ _ANALYTICS_CSS = """
 
 def render_analytics_tab(analysis):
     if analysis is None:
-        st.info("Run an analysis from the input above to see analytics here.")
+        st.info("Run an analysis from the **Live Risk Map** view to see analytics here.")
         return
 
     st.markdown(_ANALYTICS_CSS, unsafe_allow_html=True)
@@ -3929,7 +4503,7 @@ def render_analytics_tab(analysis):
 # =========================================================
 def render_report_tab(analysis):
     if analysis is None:
-        st.info("Run an analysis from the input above to generate a report.")
+        st.info("Run an analysis from the **Live Risk Map** view to generate a report.")
         return
 
     st.markdown(
@@ -3954,54 +4528,226 @@ def render_report_tab(analysis):
 
     selected_audio_name = st.selectbox("🎧 Audio language", list(AUDIO_LANGUAGES), index=0)
     selected_audio_code = AUDIO_LANGUAGES[selected_audio_name]
-    try:
-        audio_bytes = generate_audio_report(analysis, language=selected_audio_code)
-        audio_filename = f"disaster_audio_report_{selected_audio_code}.mp3"
-        with open(audio_filename, "wb") as audio_file:
-            audio_file.write(audio_bytes)
+    audio_source = _sanitize_for_speech(build_audio_narrative(analysis))
+    audio_request_key = hashlib.sha256(
+        f"{selected_audio_code}\0{audio_source}".encode("utf-8")
+    ).hexdigest()
+
+    if st.button("🎙️ Generate audio briefing", type="primary", key="generate_audio_report"):
+        try:
+            with st.spinner(f"Generating the briefing in {selected_audio_name}..."):
+                generated_audio = generate_audio_report(analysis, language=selected_audio_code)
+            audio_filename = f"disaster_audio_report_{selected_audio_code}.mp3"
+            with open(audio_filename, "wb") as audio_file:
+                audio_file.write(generated_audio)
+            st.session_state.generated_audio_report = {
+                "key": audio_request_key,
+                "bytes": generated_audio,
+                "filename": audio_filename,
+            }
+        except Exception as e:
+            st.session_state.pop("generated_audio_report", None)
+            logging.exception("Audio report generation failed")
+            st.error(f"❌ Could not generate the {selected_audio_name} audio briefing. {e}")
+            st.info("The translation or speech service may be busy. Wait briefly, then press Generate again.")
+
+    cached_audio = st.session_state.get("generated_audio_report", {})
+    if cached_audio.get("key") == audio_request_key:
+        audio_bytes = cached_audio["bytes"]
+        audio_filename = cached_audio["filename"]
         st.markdown(f"<div class='report-panel'><div class='report-panel-title'>🎧 Audio briefing · {selected_audio_name}</div>Listen to a translated spoken summary of the same analysis.</div>", unsafe_allow_html=True)
         st.audio(audio_bytes, format="audio/mpeg")
         st.caption(f"Saved as `{os.path.abspath(audio_filename)}`")
         st.download_button(label="🎵 Download Audio Report", data=audio_bytes, file_name=audio_filename, mime="audio/mpeg")
-    except Exception as e:
-        log_error("Error generating or playing audio report.", exc=e)
 
 
 # =========================================================
 #  APP ENTRY POINT
 # =========================================================
-def main():
-    st.set_page_config(page_title="Disaster Copilot", layout="wide")
-
-    st.title("🌍 Disaster Copilot Dashboard")
-    st.markdown("Real-time disaster risk analysis using weather intelligence")
-
-    now = datetime.datetime.now()
-    st.markdown(f"📅 Date: {now.strftime('%d %B %Y')} | ⏰ Time: {now.strftime('%I:%M %p')}")
-
+def render_location_selection(show_snapshot=True):
     if "analysis" not in st.session_state:
         st.session_state.analysis = None
 
-    place = st.text_input("Enter Place Name")
-    if st.button("Analyze Risk"):
+    def reset_analysis():
+        """Hide results as soon as any part of the selected area changes."""
+        st.session_state.analysis = None
+
+    st.markdown("### 📍 Select a Place")
+    st.caption("Choose the location manually or use voice input, then run the local risk analysis.")
+    voice_language_col, voice_input_col = st.columns([1, 3])
+    with voice_language_col:
+        voice_language_name = st.selectbox(
+            "🗣️ Spoken language",
+            list(VOICE_INPUT_LANGUAGES),
+            index=0,
+            key="voice_location_language",
+        )
+    with voice_input_col:
+        voice_audio = st.audio_input(
+            "🎙️ Say your district, state, and country",
+            help="Example: Dhalai, Tripura, India. Speak all available levels for the best match.",
+            key="voice_location_audio",
+        )
+
+    if voice_audio is not None:
+        audio_bytes = voice_audio.getvalue()
+        audio_digest = hashlib.sha256(
+            audio_bytes + VOICE_INPUT_LANGUAGES[voice_language_name].encode("utf-8")
+        ).hexdigest()
+        if st.session_state.get("processed_voice_location") != audio_digest:
+            st.session_state.processed_voice_location = audio_digest
+            try:
+                with st.spinner("Listening and locating the place..."):
+                    transcript = transcribe_location_audio(
+                        audio_bytes, VOICE_INPUT_LANGUAGES[voice_language_name]
+                    )
+                    voice_location = resolve_spoken_location(transcript)
+                st.session_state.voice_location_transcript = transcript
+                if voice_location is None:
+                    st.session_state.voice_location_error = (
+                        f'Heard “{transcript}”, but could not identify every location level. '
+                        "Please say the district, state, and country clearly."
+                    )
+                else:
+                    st.session_state.voice_location_error = None
+                    st.session_state.voice_location = voice_location
+                    continent_value = voice_location["continent"]
+                    country_value = voice_location["country"]
+                    state_value = voice_location["state"]
+                    st.session_state.selected_continent = continent_value
+                    st.session_state[f"selected_country::{continent_value}"] = country_value
+                    st.session_state[
+                        f"selected_state::{continent_value}::{country_value}"
+                    ] = state_value
+                    st.session_state[
+                        f"selected_district::{country_value}::{state_value}"
+                    ] = voice_location["district"]
+                    st.session_state.analysis = None
+                    st.rerun()
+            except Exception as exc:
+                st.session_state.voice_location_error = (
+                    "The recording could not be understood. Check your internet connection "
+                    "and try speaking more slowly."
+                )
+                log_error("Voice location recognition failed.", exc=exc)
+
+    if st.session_state.get("voice_location_error"):
+        st.warning(st.session_state.voice_location_error)
+    elif st.session_state.get("voice_location_transcript"):
+        st.success(f"🎤 Heard: {st.session_state.voice_location_transcript}")
+
+    location_columns = st.columns(4)
+    country_directory = get_countries_by_continent()
+    voice_location = st.session_state.get("voice_location") or {}
+
+    with location_columns[0]:
+        continent = st.selectbox(
+            "Continent", CONTINENTS, index=None,
+            placeholder="Select continent", key="selected_continent",
+            on_change=reset_analysis,
+        )
+
+    countries = country_directory.get(continent, []) if continent else []
+    with location_columns[1]:
+        country = st.selectbox(
+            "Country", countries, index=None, placeholder="Select country",
+            disabled=not continent,
+            key=f"selected_country::{continent or 'none'}",
+            on_change=reset_analysis,
+        )
+
+    states = get_states_for_country(country) if country else []
+    if country == voice_location.get("country") and voice_location.get("state"):
+        states = sorted(set(states) | {voice_location["state"]})
+    with location_columns[2]:
+        state = st.selectbox(
+            "State / Region", states, index=None, placeholder="Select state or region",
+            disabled=not country,
+            key=f"selected_state::{continent or 'none'}::{country or 'none'}",
+            on_change=reset_analysis,
+        )
+
+    districts = get_districts_for_state(country, state) if country and state else []
+    if (
+        country == voice_location.get("country")
+        and state == voice_location.get("state")
+        and voice_location.get("district")
+    ):
+        districts = sorted(set(districts) | {voice_location["district"]})
+    with location_columns[3]:
+        district = st.selectbox(
+            "District", districts, index=None, placeholder="Select district",
+            disabled=not state,
+            key=f"selected_district::{country or 'none'}::{state or 'none'}",
+            help="For countries without a district tier, select the equivalent city or locality.",
+            on_change=reset_analysis,
+        )
+
+    location_complete = all((continent, country, state, district))
+    if continent and not countries:
+        st.warning("Country data is temporarily unavailable. Please try again shortly.")
+    elif country and not states:
+        st.warning("State data is temporarily unavailable for this country. Please try again shortly.")
+    elif state and not districts:
+        st.warning("District data is temporarily unavailable for this state. Please try again shortly.")
+
+    if st.button("Analyze Risk", disabled=not location_complete, type="primary"):
         with st.spinner("Analyzing risk..."):
             try:
-                result = run_analysis(place)
+                result = run_analysis(district, state, country)
             except Exception as e:
                 result = None
                 log_error("Something went wrong while analyzing this location.", exc=e)
 
         if result is None:
-            st.error("Place not found ❌")
+            st.error("The selected district could not be located. Please choose another nearby district.")
         else:
             st.session_state.analysis = result
 
-    tab_home, tab_pred, tab_resp, tab_analytics, tab_report = st.tabs(
-        ["🏠 Home", "🌪️ Disaster Prediction", "🚨 Emergency Response", "📊 Analytics", "📄 Report"]
+    if show_snapshot:
+        st.markdown("---")
+        render_local_snapshot(st.session_state.analysis)
+
+
+def main():
+    st.set_page_config(page_title="Disaster Copilot", page_icon="🌍", layout="wide")
+
+    title_col, time_col = st.columns([4, 1])
+    with title_col:
+        st.title("🌍 Disaster Copilot")
+        st.caption("Real-time global monitoring and location-level disaster intelligence")
+    with time_col:
+        now = datetime.datetime.now()
+        st.markdown(
+            f"<div style='text-align:right;color:#94a3b8;font-size:.78rem;padding-top:18px'>"
+            f"{now.strftime('%d %b %Y')}<br>{now.strftime('%I:%M %p')}</div>",
+            unsafe_allow_html=True,
+        )
+
+    if "analysis" not in st.session_state:
+        st.session_state.analysis = None
+
+    (
+        tab_global, tab_pred,
+        tab_resp, tab_analytics, tab_report,
+    ) = st.tabs(
+        [
+            "🌍 Global Risk", "🌪️ Prediction", "🚑 Response",
+            "📊 Analytics", "📄 Report",
+        ]
     )
 
-    with tab_home:
-        render_home_tab(st.session_state.analysis)
+    with tab_global:
+        danger_view, map_view = st.tabs(["🚨 Danger Locations", "🌍 Live Risk Map"])
+        with danger_view:
+            render_danger_locations_tab()
+        with map_view:
+            render_home_tab(st.session_state.analysis, map_only=True)
+            with st.expander(
+                "📍 Select a place for local analysis",
+                expanded=False,
+            ):
+                render_location_selection(show_snapshot=False)
     with tab_pred:
         render_prediction_tab(st.session_state.analysis)
     with tab_resp:
