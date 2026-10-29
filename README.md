@@ -36,3 +36,14 @@ Clone the repository:
 ```bash
 git clone https://github.com/YOUR_USERNAME/disaster-copilot.git
 cd disaster-copilot
+```
+
+## Run
+
+On macOS or Linux, activate the project environment, install dependencies if needed, and start the dashboard:
+
+```bash
+source dis_env/bin/activate
+python -m pip install -r requirements.txt
+python -m streamlit run disaster_dashboard.py
+```
